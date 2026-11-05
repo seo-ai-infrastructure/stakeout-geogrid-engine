@@ -1,0 +1,143 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum ScanStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+enum PinStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum TargetType {
+  mobile_maps
+  mobile_chrome
+  mobile_google
+}
+
+model User {
+  id               String         @id @default(cuid())
+  clerkId          String         @unique
+  email            String         @unique
+  name             String?
+  paypalSubscriptionId String?    @unique // active PayPal subscription (I-XXXX), null when none
+  creditBalance    Int            @default(0) // signup grant is written as a ledger row, not a default
+  ledger           CreditLedger[]
+  scans            GridScan[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model CreditLedger {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount     Int // positive = grant/refund, negative = hold
+  reason     String // SIGNUP_GRANT | PAYPAL_TOPUP | PAYPAL_SUB | SCAN_HOLD | PIN_REFUND | SCAN_CANCEL_REFUND | ADJUSTMENT
+  scanId     String?
+  pinId      String?
+  externalId String?  @unique // paypal:capture:<id> | paypal:sale:<id> → idempotent grants
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+/// Synced from the DuoPlus phone list on every boot and refresh (spec §8).
+model DevicePool {
+  imageId           String    @id // DuoPlus cloud phone id
+  proxyId           String // DuoPlus saved proxy record bound to this phone
+  slotIndex         Int       @unique // Proxy-Seller port = 10000 + slotIndex
+  label             String?
+  isEnabled         Boolean   @default(true)
+  cooldownUntil     DateTime  @default(now())
+  lastUsedAt        DateTime  @default(now())
+  scriptMd5         String? // md5 of run_pin.sh known to be on the device
+  setupAt           DateTime? // animations off
+  // rotating proxy, configured once per scan area (spec §7.6)
+  proxyGeoKey       String? // "<zip>|<city>|<state>|<isp>|<rotation>" the proxy currently targets
+  proxyLogin        String?
+  proxyRung         String?
+  proxyCheck        Json? // DuoPlus proxy/check sample taken when configured
+  proxyConfiguredAt DateTime?
+  updatedAt         DateTime  @updatedAt
+}
+
+model GridScan {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keyword         String
+  targetBusiness  String // "Name|Alias|Alias"
+  targetPlaceId   String?
+  targetType      TargetType @default(mobile_maps)
+  centerLat       Float
+  centerLng       Float
+  zip             String
+  city            String
+  stateCode       String
+  ispId           String // Proxy-Seller ISP id
+  gridSize        Int // 3 | 5 | 7 | 9 | 11
+  spacingKm       Float      @default(1.60934)
+  totalPins       Int
+  completedPins   Int        @default(0)
+  failedPins      Int        @default(0)
+  creditsCharged  Int
+  creditsRefunded Int        @default(0)
+  status          ScanStatus @default(QUEUED)
+  arp             Float?
+  atrp            Float?
+  solv            Float?
+  pins            GridPin[]
+  createdAt       DateTime   @default(now())
+  completedAt     DateTime?
+
+  @@index([userId, createdAt])
+}
+
+model GridPin {
+  id               String    @id @default(cuid())
+  scanId           String
+  scan             GridScan  @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  rowIdx           Int
+  colIdx           Int
+  lat              Float
+  lng              Float
+  zip              String
+  status           PinStatus @default(PENDING)
+  attempts         Int       @default(0)
+  assignedDeviceId String?
+  rankFound        Int? // 1..20, null = not in top 20
+  matchedDumpIdx   Int?
+  topCompetitors   Json? // [{ name, sponsored, dumpIdx }]
+  proxyMeta        Json? // full DuoPlus proxy/check payload
+  proxyRung        String? // ZIP+ISP | CITY+ISP | CITY | STATE
+  exitIp           String?
+  flags            Json? // ["captcha","map_drift","video_missing",...]
+  videoKey         String? // R2 object key
+  dumpsTarKey      String? // raw per-stop dumps from the phone
+  serpXmlKey       String? // all scroll stops merged into one XML document
+  serpJsonKey      String? // structured listings (rank, name, rating, reviews, details)
+  serpHtmlKey      String? // HTML recreation of the results list for reports
+  metaJsonKey      String?
+  lastError        String?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([scanId, rowIdx, colIdx])
+  @@index([scanId, status])
+}

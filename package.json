@@ -1,0 +1,12 @@
+{
+  "name": "geogrid-engine",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dev:web": "pnpm --filter web dev",
+    "dev:worker": "pnpm --filter @geogrid/worker dev",
+    "db:generate": "pnpm --filter @geogrid/db generate",
+    "db:push": "pnpm --filter @geogrid/db push"
+  }
+}

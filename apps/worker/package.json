@@ -1,0 +1,27 @@
+{
+  "name": "@geogrid/worker",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "boot": "pnpm --filter @geogrid/db push --skip-generate && tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.750.0",
+    "@aws-sdk/s3-request-presigner": "^3.750.0",
+    "@geogrid/db": "workspace:*",
+    "bullmq": "^5.40.0",
+    "dotenv": "^16.4.0",
+    "fast-xml-parser": "^5.0.0",
+    "ioredis": "^5.6.0",
+    "tsx": "^4.19.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.8.0"
+  }
+}
