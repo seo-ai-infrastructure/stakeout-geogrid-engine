@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # GeoGrid Engine
 
 Real-device local rank grids with 45-second video proof per pin, run on DuoPlus cloud phones.
@@ -20,3 +21,6 @@ After deploying, open `/status?token=<HEALTH_TOKEN>` on the site: one card per p
 - `packages/db` — Prisma schema + client singleton (`@geogrid/db`)
 - `apps/web` — Next.js 15 UI, scan API, PayPal billing (packs + monthly plans)
 - `apps/worker` — BullMQ worker, boot tasks, DuoPlus / Proxy-Seller / R2 clients, on-device `run_pin.sh`
+=======
+# stakeout-geogrid-engine
+>>>>>>> aa7351d3f899635dc34a048432eb9dee994ae661
