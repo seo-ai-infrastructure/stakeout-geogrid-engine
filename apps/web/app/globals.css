@@ -1,3 +1,6 @@
+:root { --font-plex: "IBM Plex Sans"; --font-plex-condensed: "IBM Plex Sans Condensed"; }
+
+.service-notice { padding: 14px 24px; background: #fff4d6; color: #503b08; border-bottom: 1px solid #e6ce8b; text-align: center; font-size: 14px; }
 /* GeoGrid Engine — survey-console look: cool paper, one typeface, pins carry the colour. */
 :root {
   color-scheme: light dark;

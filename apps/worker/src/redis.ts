@@ -9,9 +9,13 @@ export const connection = new Redis(env.REDIS_URL, {
 
 /** Separate connection for locks/limiter so BullMQ's blocking commands never stall them. */
 export const kv = new Redis(env.REDIS_URL, {
-  maxRetriesPerRequest: null,
+  maxRetriesPerRequest: 2,
+  commandTimeout: 8000,
   enableReadyCheck: false,
 });
+
+connection.on("error", e => console.error("Redis worker connection:", e.message));
+kv.on("error", e => console.error("Redis control connection:", e.message));
 
 const RELEASE_LUA = `
 if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end
@@ -37,7 +41,7 @@ export async function releaseLock(key: string, owner: string): Promise<void> {
 }
 
 /* Device lease wrappers (spec §6) */
-export const tryLease = (imageId: string, owner: string) => tryLock(leaseKey(imageId), owner);
+export const tryLease = (imageId: string, owner: string, ttlSec = DEVICE_LEASE_SEC) => tryLock(leaseKey(imageId), owner, ttlSec);
 export const extendLease = (imageId: string, owner: string) => extendLock(leaseKey(imageId), owner);
 export const releaseLease = (imageId: string, owner: string) => releaseLock(leaseKey(imageId), owner);
 

@@ -1,17 +1,24 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { env, DEVICE_RT_DIR, DEVICE_SCRIPT_PATH } from "./config.js";
 import { acquireDuoPlusSlot } from "./redis.js";
+import { normalizeOutput } from "./deviceOutput.js";
 
 /* ------------------------------------------------------------------ */
 /* Transport                                                           */
 /* ------------------------------------------------------------------ */
 
 export class DuoPlusError extends Error {
-  constructor(public endpoint: string, public payload: unknown) {
-    super(`DuoPlus ${endpoint}: ${JSON.stringify(payload).slice(0, 400)}`);
+  constructor(public endpoint: string, payload: unknown) {
+    const source = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+    const safe = Object.fromEntries(["httpStatus", "code", "message", "msg", "reason"].filter(k => source[k] !== undefined).map(k => [k, source[k]]));
+    let detail = JSON.stringify(safe);
+    for (const secret of [env.DUOPLUS_API_KEY, env.PROXY_SELLER_BASE_LOGIN, env.PROXY_SELLER_PASSWORD]) {
+      if (secret) detail = detail.replaceAll(secret, "[redacted]");
+    }
+    super(`DuoPlus ${endpoint}: ${detail.slice(0, 400)}`);
     this.name = "DuoPlusError";
   }
 }
@@ -44,6 +51,10 @@ async function post<T = unknown>(endpoint: string, body: Record<string, unknown>
 /* ------------------------------------------------------------------ */
 
 export type PhoneRow = { image_id?: string; id?: string; [k: string]: unknown };
+
+export async function phoneInfo(imageId: string): Promise<PhoneRow> {
+  return post<PhoneRow>("/api/v1/cloudPhone/info", { image_id: imageId });
+}
 
 export async function listPhones(): Promise<PhoneRow[]> {
   const data = await post<unknown>("/api/v1/cloudPhone/list", {
@@ -114,7 +125,16 @@ export async function checkProxy(proxyId: string): Promise<ProxyCheck> {
     city: pick(src, ["city"]),
     timezone: pick(src, ["timezone", "timeZone", "time_zone"]),
     isp: pick(src, ["isp", "org", "as"]),
-    raw: data,
+    // The provider includes proxy credentials in its response. Only evidence
+    // fields may be persisted or included in customer-visible artifacts.
+    raw: {
+      success: ok, ip,
+      country: pick(src, ["country", "countryCode", "country_code"]),
+      region: pick(src, ["region", "regionName", "province", "state", "state_code"]),
+      city: pick(src, ["city"]),
+      timezone: pick(src, ["timezone", "timeZone", "time_zone"]),
+      isp: pick(src, ["isp", "org", "as"]),
+    },
   };
 }
 
@@ -131,21 +151,20 @@ export async function updatePhones(images: PhoneUpdate[]): Promise<void> {
 
 /** Run a shell command (< 10 s) on one or more phones; returns stdout text. */
 export async function command(imageIds: string[], cmd: string): Promise<string> {
-  const data = await post<unknown>("/api/v1/cloudPhone/command", { image_ids: imageIds, command: cmd });
-  return normalizeOutput(data);
+  const run = async (text: string) => normalizeOutput(await post<unknown>("/api/v1/cloudPhone/command", { image_ids: imageIds, command: text }));
+  if (Buffer.byteLength(cmd, "utf8") <= 1000) return run(cmd);
+  // The API caps command bodies at 1024 characters. Presigned capture URLs
+  // can exceed that limit; stage a short-lived script using bounded chunks.
+  const file = `/data/local/tmp/stakeout-${randomUUID()}`;
+  try {
+    await run(`: > ${file}.b64`);
+    for (const chunk of Buffer.from(cmd, "utf8").toString("base64").match(/.{1,700}/g) ?? []) {
+      await run(`echo '${chunk}' >> ${file}.b64`);
+    }
+    return await run(`base64 -d ${file}.b64 > ${file}.sh && sh ${file}.sh`);
+  } finally { await run(`rm -f ${file}.b64 ${file}.sh`).catch(() => {}); }
 }
 
-function normalizeOutput(data: unknown): string {
-  if (data == null) return "";
-  if (typeof data === "string") return data;
-  if (Array.isArray(data)) return data.map(normalizeOutput).join("\n");
-  const o = data as Record<string, unknown>;
-  for (const k of ["output", "result", "stdout", "data", "msg"]) {
-    if (typeof o[k] === "string") return o[k] as string;
-    if (Array.isArray(o[k])) return normalizeOutput(o[k]);
-  }
-  return JSON.stringify(o);
-}
 
 /* ------------------------------------------------------------------ */
 /* One-time device preparation                                         */
@@ -169,10 +188,10 @@ export async function setupDevice(imageId: string): Promise<void> {
   );
 }
 
-/** Push run_pin.sh as ≤1.5 KB base64 chunks (command body stays small, each call < 10 s). */
+/** Push run_pin.sh below the provider's 1024-character command limit. */
 export async function pushScript(imageId: string): Promise<void> {
   const b64 = Buffer.from(RUN_PIN_SH, "utf8").toString("base64");
-  const chunks = b64.match(/.{1,1500}/g) ?? [];
+  const chunks = b64.match(/.{1,700}/g) ?? [];
   const tmp = `${DEVICE_RT_DIR}/run_pin.b64`;
   await command([imageId], `mkdir -p ${DEVICE_RT_DIR} && : > ${tmp} && echo begin`);
   for (const c of chunks) await command([imageId], `echo '${c}' >> ${tmp}`);

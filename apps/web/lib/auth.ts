@@ -1,18 +1,21 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { db, type User } from "@geogrid/db";
+import { cache } from "react";
+import { cookies } from "next/headers";
+import { createHash, randomBytes } from "node:crypto";
+import { db } from "@geogrid/db";
 
-/** Resolve (or lazily create) the local User for the signed-in Clerk identity. New accounts start with 0 credits: no free trial. */
-export async function requireUser(): Promise<User | null> {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
-  const existing = await db.user.findUnique({ where: { clerkId } });
-  if (existing) return existing;
-  const cu = await currentUser();
-  const email = cu?.primaryEmailAddress?.emailAddress ?? `${clerkId}@no-email.local`;
-  try {
-    return await db.user.create({ data: { clerkId, email, name: cu?.fullName ?? null, creditBalance: 0 } });
-  } catch (e) {
-    if ((e as { code?: string }).code === "P2002") return db.user.findUnique({ where: { clerkId } });
-    throw e;
-  }
+export const SESSION_COOKIE = process.env.NODE_ENV === "production" ? "__Host-stakeout_session" : "stakeout_session";
+export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+export const newToken = () => randomBytes(32).toString("hex");
+export const validToken = (token: string) => /^[a-f0-9]{64}$/.test(token);
+export const sessionOptions = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
+
+export const requireUser = cache(async () => {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token || !validToken(token)) return null;
+  const session = await db.session.findUnique({ where: { hash: hashToken(token) }, include: { user: true } });
+  return session && session.expiresAt > new Date() ? session.user : null;
+});
+
+export function isAdmin(email: string): boolean {
+  return (process.env.ADMIN_EMAILS ?? "").split(",").some(e => e.trim().toLowerCase() === email.toLowerCase());
 }

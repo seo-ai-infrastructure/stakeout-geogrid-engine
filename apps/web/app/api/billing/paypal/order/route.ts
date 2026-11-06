@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
+import { site } from "@/lib/site";
 import { appUrl, currency, findPack, orderCustomId } from "@/lib/billing";
 import { approveLink, paypal, type Order } from "@/lib/paypal";
+import { platformEnabled, unavailableMessage } from "@/lib/availability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,6 +12,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!platformEnabled()) return NextResponse.json({ error: unavailableMessage }, { status: 503 });
   const { packId } = (await req.json().catch(() => ({}))) as { packId?: string };
   const pack = packId ? findPack(packId) : undefined;
   if (!pack) return NextResponse.json({ error: "unknown credit pack" }, { status: 400 });
@@ -21,14 +24,14 @@ export async function POST(req: Request) {
         {
           reference_id: pack.id,
           custom_id: orderCustomId(user.id, pack.id),
-          description: `GeoGrid Engine — ${pack.label}`,
+          description: `${site.name} — ${pack.label}`,
           amount: { currency_code: currency(), value: pack.price },
         },
       ],
       payment_source: {
         paypal: {
           experience_context: {
-            brand_name: "GeoGrid Engine",
+            brand_name: site.name,
             user_action: "PAY_NOW",
             shipping_preference: "NO_SHIPPING",
             return_url: `${appUrl()}/api/billing/paypal/return?kind=order`,

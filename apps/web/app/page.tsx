@@ -5,6 +5,7 @@ import NewScanForm from "@/components/NewScanForm";
 import Landing from "@/components/Landing";
 import BuyCredits from "@/components/BuyCredits";
 import { currency, packs, plans } from "@/lib/billing";
+import { platformEnabled } from "@/lib/availability";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const billing = typeof sp.billing === "string" ? BILLING_MESSAGES[sp.billing] : undefined;
   const user = await requireUser();
   if (!user) return <Landing />;
+  const enabled = platformEnabled();
   const scans = await db.gridScan.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 50 });
 
   return (
@@ -36,7 +38,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           <p className="muted">
             Credits available: <strong className="num">{user.creditBalance}</strong>. Each point costs 1 credit. Points that fail are credited back automatically.
           </p>
-          {user.creditBalance === 0 && scans.length === 0 ? (
+          {!enabled && scans.length === 0 ? <p className="muted">Your account is ready. New scans will be available when service setup is complete.</p> : user.creditBalance === 0 && scans.length === 0 ? (
             <div className="empty">
               <h2>Buy credits to run your first scan</h2>
               <p>
@@ -75,10 +77,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
             </table>
           )}
         </section>
-        <aside>
+        {enabled && <aside>
           <NewScanForm creditBalance={user.creditBalance} />
           <BuyCredits packs={packs()} plans={plans()} currency={currency()} hasSubscription={!!user.paypalSubscriptionId} />
-        </aside>
+        </aside>}
       </div>
     </main>
   );

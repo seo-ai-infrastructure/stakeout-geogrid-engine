@@ -1,26 +1,48 @@
-<<<<<<< HEAD
-# GeoGrid Engine
+# Stakeout Search GeoGrid
 
-Real-device local rank grids with 45-second video proof per pin, run on DuoPlus cloud phones.
-Fully hosted: Vercel (website) + Railway (worker) + Neon + Upstash + Cloudflare R2 + PayPal.
-Nothing runs on a local machine. Architecture and contracts: [`spec.md`](./spec.md).
+Real Android search measurements with per-pin recordings and results. The current architecture is Vercel (Next.js), Neon (accounts, sessions, credits, scans and dispatch outbox), Railway (BullMQ worker and private Redis), Cloudflare R2 (private captures), Resend SMTP (email sign-in), and PayPal (credit purchases).
 
-## Deploy (browser only)
+## Deployment
 
-| Piece | Where | How |
-|-------|-------|-----|
-| `apps/worker` | Railway | Deploy from GitHub; `railway.json` builds `apps/worker/Dockerfile`. Paste the variables from `apps/worker/.env.example` (filled in). On boot it creates the database tables, discovers your powered-on DuoPlus phones (one API call; concurrency = usable phones), checks each phone, and starts. Every 5 minutes it re-reads the phone list. Deploy this first. |
-| `apps/web` | Vercel | Root directory `apps/web`; variables from `apps/web/.env.example`; PayPal webhook → `/api/webhooks/paypal`. |
+- **Vercel:** root directory `apps/web`, Node 22, install `pnpm install --frozen-lockfile`, build `pnpm --filter @geogrid/db generate && pnpm build`. Enable source files outside the root directory. Variables are documented in `apps/web/.env.example`.
+- **Railway worker:** Set `DUOPLUS_GROUP_NAME` to the dedicated worker group. The phone details API resolves proxy bindings; each worker phone must have a distinct saved proxy record. Video and screen dumps are required for a completed pin.
+- **Railway build:** repository root, Dockerfile `apps/worker/Dockerfile`, start `pnpm --filter @geogrid/worker boot`. Watch worker, database, and workspace configuration files. The boot command applies additive schema changes; inspect any schema change before deployment and never pass `--accept-data-loss`.
+- **Railway Redis:** persistent `/data` volume, AOF enabled, `maxmemory-policy=noeviction`, no public TCP proxy. Worker `REDIS_URL=${{Redis.REDIS_URL}}`. Vercel does not need Redis access.
+- **Neon:** the web app and worker share the same production branch. `DATABASE_URL` uses its pooled endpoint; `DIRECT_URL` uses the direct endpoint. Use a separate branch for integration tests.
+- **R2:** keep the bucket private. The authenticated artifact endpoint checks scan ownership before issuing a 15-minute signed URL. No public bucket domain is required.
+- **Resend:** verified sending domain, SMTP TLS on port 465 and an explicit `SMTP_FROM`. Email links expire in 15 minutes and require a confirmation click; revocable sessions expire in 30 days. New accounts start at zero credits. Admin email addresses can open `/status` after sign-in.
+- **PayPal:** credentials and webhook must use the same sandbox/live environment. Configure `/api/webhooks/paypal` on the stable app URL. The application accepts `PAYPAL_PACKS_JSON` or the existing `PAYPAL_PACK_{500,750,3000,7500}_USD_CENTS` variables. Monthly plans require `PAYPAL_PLANS_JSON` with verified prices and plan IDs.
 
-Read the Railway deploy logs: every `[boot]` line reports a setup step (tables, phones, checks).
+## Reliability
 
-After deploying, open `/status?token=<HEALTH_TOKEN>` on the site: one card per platform, green/amber/red, each with the fix.
+A scan, its pins, credit hold and dispatch rows commit atomically in Neon. Railway retries dispatch every five seconds with stable pin job IDs. A reconciler repairs missing Redis jobs and failed-event persistence. Pin completion, refund and scan counters commit in one transaction and cannot transition between terminal states. Device leases use per-attempt owners and periodic renewal. Retries write to separate artifact paths, so stale recordings are not reused.
 
-## Layout
+The status page distinguishes infrastructure availability from device readiness and untested proxy targeting. A running deployment alone does not establish that a real-device scan works.
 
-- `packages/db` — Prisma schema + client singleton (`@geogrid/db`)
-- `apps/web` — Next.js 15 UI, scan API, PayPal billing (packs + monthly plans)
-- `apps/worker` — BullMQ worker, boot tasks, DuoPlus / Proxy-Seller / R2 clients, on-device `run_pin.sh`
-=======
-# stakeout-geogrid-engine
->>>>>>> aa7351d3f899635dc34a048432eb9dee994ae661
+## Launch controls and acceptance
+
+`PLATFORM_ENABLED=false` in Vercel pauses new scans and new PayPal purchases at both the UI and API. Sign-in, balances, existing reports and payment notifications continue to work. Change it to `true` and redeploy only after a real phone scan produces readable listings and a playable video receipt.
+
+The November 6 deployment passed the production sign-in/session flow, authenticated scan creation, durable dispatch, all nine failed-pin refunds, private R2 upload and owner-only download, SMTP authentication, and PayPal approval-link creation. No test email was sent and no payment was approved or captured. Database integration checks passed on an isolated Neon branch.
+
+Live capture remains blocked by Proxy-Seller authentication: the configured login/password failed the provider connection check with and without location targeting. Replace `PROXY_SELLER_BASE_LOGIN` and `PROXY_SELLER_PASSWORD` in the Railway worker variables with a working residential proxy credential pair. Do not commit credentials. After redeployment, validate the proxy exit location and complete a small scan with playable video before resuming purchases. The dedicated DuoPlus group has three ready phones, each bound to a distinct saved proxy record.
+
+Before public sales, also supply the legal entity name and jurisdiction in Vercel and verify email inbox delivery and a buyer-approved PayPal transaction. Monthly subscriptions remain unconfigured; the four existing one-time credit packs are supported.
+
+## Development and validation
+
+```sh
+pnpm install --frozen-lockfile
+pnpm db:generate
+pnpm typecheck
+pnpm --filter web build
+pnpm --filter web start
+```
+
+`tests/integration.ts` exercises auth expiry/replay, revocation, CSRF, ownership, concurrent credit holds, durable outbox, idempotent grants/refunds and ledger consistency against a running app and an **isolated** database. It refuses to run without `TEST_DATABASE=1`:
+
+```sh
+TEST_DATABASE=1 pnpm --filter @geogrid/worker exec tsx ../../tests/integration.ts
+```
+
+Never point that test at production. Real phone captures, proxy location accuracy, video playback, PayPal buyer checkout and email inbox delivery also require live acceptance checks. `spec.md` contains the original device contracts and product scope; its deployment/authentication sections are superseded by this README.

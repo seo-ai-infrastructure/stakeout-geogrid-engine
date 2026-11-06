@@ -6,6 +6,7 @@ datasource db {
 
 generator client {
   provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 enum ScanStatus {
@@ -38,6 +39,7 @@ model User {
   creditBalance    Int            @default(0) // signup grant is written as a ledger row, not a default
   ledger           CreditLedger[]
   scans            GridScan[]
+  sessions         Session[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 }
@@ -133,6 +135,7 @@ model GridPin {
   serpJsonKey      String? // structured listings (rank, name, rating, reviews, details)
   serpHtmlKey      String? // HTML recreation of the results list for reports
   metaJsonKey      String?
+  dispatch         PinDispatch?
   lastError        String?
   startedAt        DateTime?
   finishedAt       DateTime?
@@ -140,4 +143,43 @@ model GridPin {
 
   @@unique([scanId, rowIdx, colIdx])
   @@index([scanId, status])
+}
+
+// Durable outbox: a request and its credit hold commit before Railway enqueues it.
+model PinDispatch {
+  pinId        String   @id
+  pin          GridPin  @relation(fields: [pinId], references: [id], onDelete: Cascade)
+  dispatchedAt DateTime?
+  createdAt    DateTime @default(now())
+  @@index([dispatchedAt, createdAt])
+}
+
+model WorkerState {
+  id        String   @id
+  payload   Json
+  updatedAt DateTime @updatedAt
+}
+
+model LoginToken {
+  hash      String   @id
+  email     String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([expiresAt])
+}
+
+model Session {
+  hash      String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([expiresAt])
+}
+
+model AuthRateLimit {
+  key       String   @id
+  count     Int      @default(1)
+  expiresAt DateTime
+  @@index([expiresAt])
 }

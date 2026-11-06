@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@geogrid/db";
 import { requireUser } from "@/lib/auth";
-import { appUrl } from "@/lib/billing";
+import { appUrl, parseOrderCustomId } from "@/lib/billing";
 import { paypal, PayPalError, type Order, type Subscription } from "@/lib/paypal";
 import { grantForCapture } from "@/lib/paypalGrants";
 
@@ -35,6 +35,8 @@ export async function GET(req: Request) {
   if (!orderId) return back("error");
   let order: Order;
   try {
+    const pending = await paypal<Order>(`/v2/checkout/orders/${encodeURIComponent(orderId)}`);
+    if (parseOrderCustomId(pending.purchase_units?.[0]?.custom_id)?.userId !== user.id) return back("error");
     // PayPal-Request-Id makes a refresh of this page replay the same capture instead of failing
     order = await paypal<Order>(`/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
       body: {},

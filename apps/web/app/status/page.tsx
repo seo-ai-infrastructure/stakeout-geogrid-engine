@@ -1,3 +1,4 @@
+import { requireUser, isAdmin } from "@/lib/auth";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { healthAllowed } from "@/lib/healthAuth";
@@ -11,7 +12,8 @@ const COLOR: Record<Level, string> = { ok: "var(--rank-top)", warn: "var(--rank-
 export default async function StatusPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
   const token = typeof sp.token === "string" ? sp.token : null;
-  if (!healthAllowed(token)) notFound();
+  const user = await requireUser();
+  if (!healthAllowed(token) && (!user || !isAdmin(user.email))) notFound();
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
   const { checks } = await runChecks(origin);

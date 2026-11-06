@@ -3,7 +3,8 @@ import { z } from "zod";
 import { db, COST_PER_PIN } from "@geogrid/db";
 import { requireUser } from "@/lib/auth";
 import { buildGrid, GRID_SIZES } from "@/lib/grid";
-import { JOB_OPTS, pinQueue } from "@/lib/queue";
+import { platformEnabled, unavailableMessage } from "@/lib/availability";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,12 +14,12 @@ const CreateScan = z.object({
   targetBusiness: z.string().trim().min(2).max(200),
   targetPlaceId: z.string().trim().max(120).optional(),
   targetType: z.enum(["mobile_maps", "mobile_chrome", "mobile_google"]),
-  centerLat: z.number().min(-90).max(90),
+  centerLat: z.number().min(-85).max(85),
   centerLng: z.number().min(-180).max(180),
   zip: z.string().trim().regex(/^\d{5}$/),
   city: z.string().trim().min(2).max(60),
-  stateCode: z.string().trim().length(2).transform((s) => s.toUpperCase()),
-  ispId: z.string().trim().min(1).max(40),
+  stateCode: z.string().trim().regex(/^[a-zA-Z]{2}$/).transform((s) => s.toUpperCase()),
+  ispId: z.string().trim().regex(/^\d*$/).max(40).default(""),
   gridSize: z.number().int().refine((n) => (GRID_SIZES as readonly number[]).includes(n), "gridSize must be 3,5,7,9 or 11"),
   spacingKm: z.number().min(0.25).max(10).default(1.60934),
 });
@@ -39,10 +40,11 @@ export async function GET() {
   return NextResponse.json({ creditBalance: user.creditBalance, scans });
 }
 
-/** Credit hold + scan/pins insert in one transaction, then enqueue (spec §5.1). */
+/** Credit hold + scan/pins insert in one transaction, durable dispatch in the same transaction. */
 export async function POST(req: Request) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!platformEnabled()) return NextResponse.json({ error: unavailableMessage }, { status: 503 });
   const parsed = CreateScan.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid input", issues: parsed.error.issues }, { status: 400 });
   const input = parsed.data;
@@ -77,28 +79,11 @@ export async function POST(req: Request) {
       },
       include: { pins: { select: { id: true } } },
     });
+    await tx.pinDispatch.createMany({ data: s.pins.map(p => ({ pinId: p.id })) });
     await tx.creditLedger.create({ data: { userId: user.id, amount: -cost, reason: "SCAN_HOLD", scanId: s.id } });
     return s;
   });
   if (!scan) return NextResponse.json({ error: "insufficient credits", required: cost, balance: user.creditBalance }, { status: 402 });
 
-  try {
-    await pinQueue().addBulk(
-      scan.pins.map((p) => ({
-        name: "pin",
-        data: { scanId: scan.id, pinId: p.id, targetType: input.targetType },
-        opts: { ...JOB_OPTS, jobId: p.id },
-      })),
-    );
-    await db.gridScan.update({ where: { id: scan.id }, data: { status: "RUNNING" } });
-  } catch (e) {
-    // compensate: reverse the hold so the user is never charged for a scan that never started
-    await db.$transaction([
-      db.gridScan.update({ where: { id: scan.id }, data: { status: "FAILED", creditsRefunded: cost } }),
-      db.user.update({ where: { id: user.id }, data: { creditBalance: { increment: cost } } }),
-      db.creditLedger.create({ data: { userId: user.id, amount: cost, reason: "SCAN_CANCEL_REFUND", scanId: scan.id } }),
-    ]);
-    return NextResponse.json({ error: `enqueue failed: ${(e as Error).message}` }, { status: 500 });
-  }
   return NextResponse.json({ id: scan.id, totalPins: pins.length, creditsCharged: cost }, { status: 201 });
 }

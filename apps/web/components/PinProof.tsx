@@ -31,16 +31,16 @@ export default function PinProof() {
           <dd>45 seconds per point: the app opening, the query typed, and a slow scroll to the bottom of the results.</dd>
         </div>
         <div>
-          <dt>A home connection in that neighborhood</dt>
-          <dd>The phone&apos;s GPS is set to the exact point and its traffic leaves through a residential internet connection in the same city.</dd>
+          <dt>Recorded location settings</dt>
+          <dd>The phone&apos;s GPS is set to the exact point and its traffic uses a residential proxy targeted to the area. The report includes the checked exit location.</dd>
         </div>
         <div>
           <dt>The full results list, saved</dt>
           <dd>Every business the phone saw, in order, with ratings and review counts, as a shareable report plus JSON and XML for your own reporting.</dd>
         </div>
         <div>
-          <dt>A clean phone every time</dt>
-          <dd>Cookies, history and app data are wiped before each search, so no earlier search personalizes the result.</dd>
+          <dt>A fresh app session</dt>
+          <dd>Cookies, history and app data are wiped before each search, to reduce carryover from previous app sessions.</dd>
         </div>
       </dl>
     </div>

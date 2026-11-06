@@ -5,7 +5,7 @@
  */
 import { db, Prisma } from "@geogrid/db";
 import { env } from "./config.js";
-import { listPhones, type PhoneRow } from "./duoplus.js";
+import { listPhones, phoneInfo, type PhoneRow } from "./duoplus.js";
 
 export type DiscoveredPhone = { imageId: string; proxyId: string; label: string | null; slotIndex: number };
 export type Discovery = { poweredOn: number; active: DiscoveredPhone[]; skipped: string[] };
@@ -57,7 +57,8 @@ function inGroup(row: PhoneRow, group: string): boolean | undefined {
   const r = row as Record<string, unknown>;
   const names = ["group_name", "groupName", "group", "group_title"].map((k) => r[k]);
   const nested = r.group && typeof r.group === "object" ? pickStr(r.group as Record<string, unknown>, ["name", "title"]) : undefined;
-  const values = [...names.map(str), nested].filter(Boolean) as string[];
+  const groups = Array.isArray(r.group) ? r.group.map(g => g && typeof g === "object" ? pickStr(g, ["name", "title"]) : str(g)) : [];
+  const values = [...names.map(str), nested, ...groups].filter(Boolean) as string[];
   if (!values.length) return undefined; // the list doesn't report groups
   return values.some((v) => v.toLowerCase() === group.toLowerCase());
 }
@@ -85,16 +86,26 @@ export async function discoverPhones(log: (m: string) => void): Promise<Discover
       if (g === false) continue;
       if (g === undefined && !warnedNoGroupField) {
         warnedNoGroupField = true;
-        log(`the phone list has no group field, so DUOPLUS_GROUP_NAME can't filter; using every powered-on phone`);
+        log(`the phone list has no group field, so DUOPLUS_GROUP_NAME can't filter; skipping unclassified phones`);
       }
     }
+    if (env.DUOPLUS_GROUP_NAME && inGroup(row, env.DUOPLUS_GROUP_NAME) === undefined) { skipped.push(`${imageId}: group unknown`); continue; }
     if (!subscriptionActive(row)) {
       skipped.push(`${imageId} (${label ?? "no name"}): subscription expired`);
       continue;
     }
-    const proxyId = overrides[imageId] ?? boundProxyId(row);
+    let proxyId: string | undefined = overrides[imageId] ?? boundProxyId(row);
+    // The list endpoint omits proxy bindings; the details endpoint supplies them.
+    if (!proxyId) {
+      try { proxyId = boundProxyId(await phoneInfo(imageId)); }
+      catch { skipped.push(`${imageId}: could not read proxy binding`); continue; }
+    }
     if (!proxyId) {
       skipped.push(`${imageId} (${label ?? "no name"}): no saved proxy record bound; bind one in DuoPlus or add it to DEVICE_PROXY_IDS_JSON`);
+      continue;
+    }
+    if (found.some(p => p.proxyId === proxyId)) {
+      skipped.push(`${imageId}: proxy record is shared with another worker phone; use a separate record`);
       continue;
     }
     found.push({ imageId, proxyId, label });
@@ -105,24 +116,21 @@ export async function discoverPhones(log: (m: string) => void): Promise<Discover
   return { poweredOn: rows.length, active: found.map((p, i) => ({ ...p, slotIndex: i })), skipped };
 }
 
-/** Make DevicePool match the discovery: upsert active phones, remove the rest. */
+/** Keep slot assignments stable across discovery order and temporary outages. */
 export async function syncDevicePool(phones: DiscoveredPhone[]): Promise<void> {
-  const ids = phones.map((p) => p.imageId);
-  await db.devicePool.deleteMany({ where: { imageId: { notIn: ids } } });
-  await db.devicePool.updateMany({ where: { imageId: { in: ids } }, data: { slotIndex: { increment: 100_000 } } });
-  for (const p of phones) {
-    const existing = await db.devicePool.findUnique({ where: { imageId: p.imageId } });
-    const proxyChanged = existing && (existing.proxyId !== p.proxyId || existing.slotIndex - 100_000 !== p.slotIndex);
-    await db.devicePool.upsert({
-      where: { imageId: p.imageId },
-      create: { imageId: p.imageId, proxyId: p.proxyId, slotIndex: p.slotIndex, label: p.label },
-      update: {
-        proxyId: p.proxyId,
-        slotIndex: p.slotIndex,
-        label: p.label,
-        // a different proxy record or port means the rotating login must be set again
-        ...(proxyChanged ? { proxyGeoKey: null, proxyLogin: null, proxyRung: null, proxyCheck: Prisma.DbNull, proxyConfiguredAt: null } : {}),
-      },
-    });
-  }
+  await db.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(482031)`;
+    await tx.devicePool.updateMany({ where: { imageId: { notIn: phones.map(p => p.imageId) } }, data: { isEnabled: false } });
+    const highest = await tx.devicePool.aggregate({ _max: { slotIndex: true } });
+    let next = (highest._max.slotIndex ?? -1) + 1;
+    for (const p of phones) {
+      const existing = await tx.devicePool.findUnique({ where: { imageId: p.imageId } });
+      const proxyChanged = existing && existing.proxyId !== p.proxyId;
+      await tx.devicePool.upsert({
+        where: { imageId: p.imageId },
+        create: { imageId: p.imageId, proxyId: p.proxyId, slotIndex: next++, label: p.label, isEnabled: false },
+        update: { proxyId: p.proxyId, label: p.label, ...(proxyChanged ? { isEnabled: false, proxyGeoKey: null, proxyLogin: null, proxyRung: null, proxyCheck: Prisma.DbNull, proxyConfiguredAt: null } : {}) },
+      });
+    }
+  });
 }
