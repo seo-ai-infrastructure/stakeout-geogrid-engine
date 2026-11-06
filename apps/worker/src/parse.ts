@@ -96,16 +96,18 @@ const CHROME = new Set(
 const RATING_ONLY = /^\d(\.\d)?$/;
 const REVIEWS_ONLY = /^\(\d[\d,.]*[kK]?\)$/;
 const RATING_REVIEWS = /^\d(\.\d)?\s*\(\d[\d,.]*[kK]?\)/;
+// Current Maps cards expose the rating as its own text node, e.g. "4.7 stars (105)".
+const RATING_STARS = /^[0-5](?:\.\d)?\s+stars?\s*(?:\(\d[\d,.]*[kK]?\))?$/i;
 const DESC_WITH_RATING = /^([^·]{2,80}?)\s*[·,.]?\s*\d(?:\.\d)?\s*(?:stars?\b|★|\(\d|out of 5)/i;
 const DISTANCE = /^\d+(\.\d+)?\s?(mi|km|ft|m)\b/i;
 
-const isRatingToken = (s: string) => RATING_ONLY.test(s) || REVIEWS_ONLY.test(s) || RATING_REVIEWS.test(s);
+const isRatingToken = (s: string) => RATING_ONLY.test(s) || REVIEWS_ONLY.test(s) || RATING_REVIEWS.test(s) || RATING_STARS.test(s);
 
 function plausibleTitle(s: string): boolean {
   if (s.length < 2 || s.length > 80) return false;
   const l = s.toLowerCase();
   if (CHROME.has(l)) return false;
-  if (isRatingToken(s) || DISTANCE.test(s) || /^\$/.test(s) || /^\d/.test(s)) return false;
+  if (isRatingToken(s) || DISTANCE.test(s) || /^\$/.test(s) || /^\d[\d,.]*$/.test(s)) return false;
   if (/^(open|closed|opens|closes)\b/i.test(s)) return false;
   if (/\b(mi|km)\b/.test(l) && /\d/.test(l)) return false;
   return true;
@@ -125,7 +127,7 @@ const num = (s: string) => Number(s.replace(/[,()]/g, "").replace(/k$/i, "e3"));
 
 function ratingFrom(s: string): { rating?: number; reviews?: number } {
   const out: { rating?: number; reviews?: number } = {};
-  const m = /^(\d(?:\.\d)?)\s*(?:\((\d[\d,.]*[kK]?)\))?/.exec(s);
+  const m = /^(\d(?:\.\d)?)\s*(?:stars?\s*)?(?:\((\d[\d,.]*[kK]?)\))?/i.exec(s);
   if (m && RATING_ONLY.test(m[1])) out.rating = Number(m[1]);
   if (m?.[2]) out.reviews = num(m[2]);
   const r = /^\((\d[\d,.]*[kK]?)\)$/.exec(s);
