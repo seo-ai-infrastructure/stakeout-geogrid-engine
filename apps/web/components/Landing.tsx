@@ -15,7 +15,7 @@ export default function Landing() {
       <section className="hero">
         <div className="hero-copy">
           <p className="eyebrow">Built for local SEO agencies</p>
-          <h1 className="display">Every ranking needs a receipt.</h1>
+          <h1 className="display">every data point comes with a receipt</h1>
           <p className="lede">
             Bring local rankings into focus with video clips from real cloud Android phone sessions.
             Show prospects what Google displayed, explain your recommendations, and give clients evidence they can inspect.
