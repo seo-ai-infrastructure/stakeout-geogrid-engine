@@ -5,6 +5,7 @@ import "@fontsource/ibm-plex-sans-condensed/latin-600.css";
 import { requireUser, isAdmin } from "@/lib/auth";
 import Link from "next/link";
 import SiteFooter from "@/components/SiteFooter";
+import ServiceNotice from "@/components/ServiceNotice";
 import { site } from "@/lib/site";
 import { platformEnabled, unavailableMessage } from "@/lib/availability";
 import "./globals.css";
@@ -33,7 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </nav>
             {user ? <form action="/api/auth/sign-out" method="post"><button className="btn secondary">Sign out</button></form> : <Link className="btn secondary" href="/sign-in">Sign in</Link>}
           </header>
-          {!platformEnabled() && <div className="service-notice" role="status">{unavailableMessage}</div>}
+          {!platformEnabled() && <ServiceNotice message={unavailableMessage} />}
           {children}
           <SiteFooter />
         </body>

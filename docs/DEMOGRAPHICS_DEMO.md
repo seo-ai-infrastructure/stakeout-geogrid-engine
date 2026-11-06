@@ -82,3 +82,10 @@ Browser checks: 3D/2D toggle, tilt, rotation, compass, selected-pin focus and re
 If MapLibre initialization fails, a lazy-loaded Leaflet 1.9 compatibility map renders SVG polygons and DOM rank pins. It uses the same Census attributes, filters, formulas, and selections. The 139 KB static county-only fallback geometry is simplified at 0.0001 degrees with topology preservation; it is fetched once from the app, never from TIGERweb. This is deliberately limited to 174 tracts and is not a national raw-GeoJSON architecture. The 2D context is also locally hosted: selected 2023 TIGER/Line primary/secondary roads and water polygons are clipped to the Lakeland demo extent and simplified. The builder records URLs, hashes, extent and feature counts in `metadata.mapContext`. Map labels come from those Census features. This renderer makes no external map-service calls. Attribution remains visible. The context is historical and partial; it is not a street-navigation map.
 
 The verification browser has WebGL disabled. Browser interaction and visual QA therefore exercise the 2D compatibility renderer; PMTiles was independently decoded to verify all 174 GEOIDs and properties, and the deployed archive returns HTTP 206 byte ranges. WebGL rendering itself requires a WebGL-capable browser for visual verification.
+
+
+## Sales sandbox (November 2026)
+
+The public demo includes a sandbox banner, buyer-oriented layer labels, three product benefit cards, and sprint / agency CTAs. Sprint links point to `https://www.stakeoutsearch.com/#apply`; SaaS links point to `https://grid.stakeoutsearch.com/pricing`. The main sales site remains separate from the app. The route-aware service notice retains operational status on other routes.
+
+The dossier context uses the selected tract's actual values. Rankings and AI citations remain explicitly simulated; weighted visibility is modeled, the difference is expressed in percentage points, and housing year built is not presented as roof age or purchasing intent. The supplied Miami Beach result is labeled a reported prior campaign result. Sources and methodology follow the offer section.
