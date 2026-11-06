@@ -57,7 +57,9 @@ export const MOBILE = {
   initialWaitMs: 55_000,
   tarPollIntervalMs: 5000,
   tarPollMaxMs: 120_000,
-  videoPollMaxMs: 60_000,
+  // Phone upload allows 120 s after the archive. Do not release its lease and
+  // let the next pin clear local evidence while that upload is still running.
+  videoPollMaxMs: 150_000,
   captchaCooldownMs: 30 * 60_000,
 } as const;
 
