@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { env, DEVICE_RT_DIR, DEVICE_SCRIPT_PATH } from "./config.js";
 import { acquireDuoPlusSlot } from "./redis.js";
+import { normalizeOutput } from "./deviceOutput.js";
 
 /* ------------------------------------------------------------------ */
 /* Transport                                                           */
@@ -164,17 +165,6 @@ export async function command(imageIds: string[], cmd: string): Promise<string> 
   } finally { await run(`rm -f ${file}.b64 ${file}.sh`).catch(() => {}); }
 }
 
-function normalizeOutput(data: unknown): string {
-  if (data == null) return "";
-  if (typeof data === "string") return data;
-  if (Array.isArray(data)) return data.map(normalizeOutput).join("\n");
-  const o = data as Record<string, unknown>;
-  for (const k of ["output", "result", "stdout", "data", "msg"]) {
-    if (typeof o[k] === "string") return o[k] as string;
-    if (Array.isArray(o[k])) return normalizeOutput(o[k]);
-  }
-  return JSON.stringify(o);
-}
 
 /* ------------------------------------------------------------------ */
 /* One-time device preparation                                         */
