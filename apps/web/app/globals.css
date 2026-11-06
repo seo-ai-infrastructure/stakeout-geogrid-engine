@@ -162,6 +162,7 @@ table.list tr:hover td { background: color-mix(in srgb, var(--surface) 70%, var(
 }
 .hero .display { font-size: clamp(40px, 5.4vw, 64px); max-width: 13ch; }
 .hero .lede { margin: 20px 0 28px; }
+.eyebrow { color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 14px; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .hero-grid { margin: 0; justify-self: center; }
 .hero-grid-board {
@@ -187,6 +188,14 @@ table.list tr:hover td { background: color-mix(in srgb, var(--surface) 70%, var(
 .band { max-width: 1160px; margin: 0 auto; padding: 56px 20px; border-top: 1px solid var(--rule); }
 .band h2 { font-family: var(--font-display); font-weight: 600; font-size: clamp(26px, 3vw, 34px); letter-spacing: -0.01em; margin: 0 0 8px; }
 .section-lede { color: var(--ink-2); margin: 0 0 28px; max-width: 60ch; }
+#proof { scroll-margin-top: 24px; }
+.agency-uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; margin-top: 32px; }
+.agency-uses article { border-top: 2px solid var(--accent); padding-top: 18px; }
+.agency-uses h3 { font-size: 18px; margin: 0 0 10px; }
+.agency-uses p { margin: 0; color: var(--ink-2); }
+.audit-note { padding: 18px 20px; margin: 32px 0 0; background: var(--surface); border-left: 3px solid var(--rule); color: var(--ink-2); }
+.audit-note strong { color: var(--ink); }
+@media (max-width: 760px) { .agency-uses { grid-template-columns: 1fr; gap: 24px; } }
 
 /* one pin's proof */
 .proof { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 48px; align-items: start; }
