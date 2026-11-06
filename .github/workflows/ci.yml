@@ -41,6 +41,8 @@ jobs:
       - name: Device and measurement regressions
         working-directory: apps/worker
         run: |
+          sh -n device/run_pin.sh
+          node ../../tests/device-onboarding.mjs
           node --import tsx ../../tests/device-output.ts
           node --import tsx ../../tests/saved-proxy.ts
           node --import tsx ../../tests/maps-parser.ts

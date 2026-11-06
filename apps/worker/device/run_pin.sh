@@ -110,14 +110,27 @@ tap_by_rid() {
 
 dismiss_fre() {
   r=0
-  while [ $r -lt 4 ]; do
-    dump "$RT/fre.xml" || return 0
+  # A cold launch may initially expose only a blank activity. Do not mistake
+  # that first dump for completed onboarding; wait for a usable home screen.
+  while [ $r -lt 10 ]; do
+    r=$((r+1))
+    if ! dump "$RT/fre.xml"; then sleep 2; continue; fi
     hit=0
-    for t in "Accept & continue" "Accept" "Skip" "No thanks" "Not now" "Got it" "Continue" "Use without an account" "Dismiss"; do
+    if [ "$APP" = chrome ] && tap_by_rid 'signin_fre_dismiss_button' "$RT/fre.xml"; then
+      sleep 2; continue
+    fi
+    for t in "Use without an account" "No thanks" "Not now" "Skip" "Accept & continue" "Accept" "Got it" "Dismiss" "Continue"; do
       if tap_in_file "$t" "$RT/fre.xml"; then hit=1; sleep 1.5; break; fi
     done
-    [ $hit -eq 0 ] && return 0
-    r=$((r+1))
+    if [ $hit -eq 0 ]; then
+      case $APP in
+        chrome) HOME_RID='search_box_text|url_bar' ;;
+        maps) HOME_RID='search_omnibox_text_box|search_omnibox_container' ;;
+        google) HOME_RID='googleapp_search_box|search_box|search_plate' ;;
+      esac
+      grep -qE "resource-id=\"[^\"]*($HOME_RID)\"" "$RT/fre.xml" && return 0
+      sleep 2
+    fi
   done
 }
 
