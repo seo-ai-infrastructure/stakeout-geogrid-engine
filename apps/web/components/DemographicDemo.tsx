@@ -25,8 +25,8 @@ function colorExpression(metric: Exclude<MetricKey, 'none'>): ExpressionSpecific
   return ['case', ['==', ['get', metric], null], '#687680', ['interpolate', ['linear'], ['get', metric], ...config.stops.flatMap((stop, i) => [stop, config.colors[i]])]] as ExpressionSpecification;
 }
 
-function Estimate({ value, moe, money = false, annotation = '' }: { value: number | null; moe?: number | null; money?: boolean; annotation?: string }) {
-  return <><strong>{annotation || (money ? formatMoney(value) : formatCount(value))}</strong>{validNumber(moe) && validNumber(value) && <small>± {money ? formatMoney(moe) : formatCount(moe)} margin of error</small>}</>;
+function Estimate({ value, moe, money = false, year = false, annotation = '' }: { value: number | null; moe?: number | null; money?: boolean; year?: boolean; annotation?: string }) {
+  return <><strong>{annotation || (money ? formatMoney(value) : year && validNumber(value) ? String(value) : formatCount(value))}</strong>{validNumber(moe) && validNumber(value) && <small>± {money ? formatMoney(moe) : formatCount(moe)} margin of error</small>}</>;
 }
 
 export default function DemographicDemo() {
@@ -59,7 +59,7 @@ export default function DemographicDemo() {
     let observer: ResizeObserver | undefined;
     async function init() {
       try {
-        const [gl, pm] = await Promise.all([import('maplibre-gl'), import('pmtiles')]);
+        const [{ default: gl }, pm] = await Promise.all([import('maplibre-gl'), import('pmtiles')]);
         if (disposed || !container.current) return;
         if (protocolUsers++ === 0) gl.addProtocol('pmtiles', new pm.Protocol().tile);
         releaseProtocol = () => { if (--protocolUsers === 0) gl.removeProtocol('pmtiles'); };
@@ -95,7 +95,10 @@ export default function DemographicDemo() {
           map.getCanvas().addEventListener('mouseleave', () => setHovered(null));
           setReady(true);
         });
-      } catch { if (!disposed) setMapError('The map could not start. You can still inspect every sample pin with the selector.'); }
+      } catch (error) {
+        console.error('Demographic map startup:', error);
+        if (!disposed) setMapError(`The map could not start${error instanceof Error ? `: ${error.message}` : '.'} You can still inspect every sample pin with the selector.`);
+      }
     }
     void init();
     return () => { disposed = true; observer?.disconnect(); mapRef.current?.remove(); mapRef.current = null; releaseProtocol?.(); };
@@ -151,7 +154,7 @@ export default function DemographicDemo() {
         <p className="demo-eyebrow">NEIGHBORHOOD INSPECTOR</p><h2>{selectedPin ? `Grid pin ${selectedPin.id}` : selectedTract ? selectedTract.NAMELSAD : 'No pins match'}</h2>
         <label className="demo-pin-selector"><span className="demo-label">Select a sample pin</span><select value={selectedPin?.id ?? ''} onChange={e => choosePin(e.target.value)}><option value="" disabled>{metrics.eligible.length ? 'Choose a pin' : 'No matching pins'}</option>{metrics.eligible.map(p => <option key={p.id} value={p.id}>{p.id} · Rank {pinRank(p, scenario) > 20 ? '20+' : pinRank(p, scenario)}</option>)}</select></label>
         {selectedPin && <div className="demo-pin-detail"><div><b>#{pinRank(selectedPin, scenario) > 20 ? '20+' : pinRank(selectedPin, scenario)}</b><span>Simulated rank</span></div><p>{selectedPin.lat.toFixed(4)}, {selectedPin.lng.toFixed(4)}{showAI && selectedPin.aiCited && <small><i className="demo-ai-ring" /> Simulated AI citation</small>}</p></div>}
-        {selectedTract ? <><div className="demo-tract-title"><b>{selectedTract.NAMELSAD}</b><span>GEOID {selectedTract.GEOID}</span></div><dl className="demo-tract-stats"><div><dt>Median household income</dt><dd><Estimate value={selectedTract.income} moe={selectedTract.income_moe} annotation={selectedTract.income_annotation} money /></dd></div><div><dt>Owner-occupied share</dt><dd><strong>{formatPercent(selectedTract.owner_pct)}</strong><small>{formatCount(selectedTract.owner_units)} of {formatCount(selectedTract.occupied_units)} occupied homes</small></dd></div><div><dt>Median home value</dt><dd><Estimate value={selectedTract.home_value} moe={selectedTract.home_value_moe} annotation={selectedTract.home_value_annotation} money /></dd></div><div><dt>Median year built</dt><dd><Estimate value={selectedTract.year_built} moe={selectedTract.year_built_moe} annotation={selectedTract.year_built_annotation} /></dd></div></dl><div className="demo-secondary-stats"><span>Poverty rate <b>{formatPercent(selectedTract.poverty_pct)}</b></span><span>Unemployment <b>{formatPercent(selectedTract.unemp_pct)}</b></span></div><p className="demo-inspector-note">ACS estimates describe a tract, not a household. Dollar values are in 2023 dollars; shown margins of error are 90% intervals.</p></> : <p className="demo-inspector-note">{selectedPin ? 'This pin does not intersect a cartographic tract polygon. Its rank is included in Standard SoLV; it is excluded from Weighted SoLV.' : 'Lower the filters to bring sample pins back into view.'}</p>}
+        {selectedTract ? <><div className="demo-tract-title"><b>{selectedTract.NAMELSAD}</b><span>GEOID {selectedTract.GEOID}</span></div><dl className="demo-tract-stats"><div><dt>Median household income</dt><dd><Estimate value={selectedTract.income} moe={selectedTract.income_moe} annotation={selectedTract.income_annotation} money /></dd></div><div><dt>Owner-occupied share</dt><dd><strong>{formatPercent(selectedTract.owner_pct)}</strong><small>{formatCount(selectedTract.owner_units)} of {formatCount(selectedTract.occupied_units)} occupied homes</small></dd></div><div><dt>Median home value</dt><dd><Estimate value={selectedTract.home_value} moe={selectedTract.home_value_moe} annotation={selectedTract.home_value_annotation} money /></dd></div><div><dt>Median year built</dt><dd><Estimate value={selectedTract.year_built} moe={selectedTract.year_built_moe} annotation={selectedTract.year_built_annotation} year /></dd></div></dl><div className="demo-secondary-stats"><span>Poverty rate <b>{formatPercent(selectedTract.poverty_pct)}</b></span><span>Unemployment <b>{formatPercent(selectedTract.unemp_pct)}</b></span></div><p className="demo-inspector-note">ACS estimates describe a tract, not a household. Dollar values are in 2023 dollars; shown margins of error are 90% intervals.</p></> : <p className="demo-inspector-note">{selectedPin ? 'This pin does not intersect a cartographic tract polygon. Its rank is included in Standard SoLV; it is excluded from Weighted SoLV.' : 'Lower the filters to bring sample pins back into view.'}</p>}
         <div className="demo-receipt-note"><span>DEMO DATA</span><p>These sample rankings have no phone recording. Live Stakeout scans attach the evidence receipt.</p></div>
       </aside>
     </div>
