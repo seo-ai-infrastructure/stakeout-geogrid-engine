@@ -143,9 +143,17 @@ const isDetail = (s: string) => {
 export function extractBusinesses(strings: Str[], dumpIdx: number): Business[] {
   const found: Business[] = [];
   const titleAt = new Map<number, Business>();
+  // Google can label an entire multi-card ad group only once. Looking back
+  // three strings marks its first card but incorrectly ranks subsequent ads.
+  let inSponsoredGroup = false;
+  const sponsoredGroup = strings.map(({ s }) => {
+    if (/^sponsored results$/i.test(s)) inSponsoredGroup = true;
+    if (/^(hide sponsored results|places|businesses|web results|ai overview)$/i.test(s)) inSponsoredGroup = false;
+    return inSponsoredGroup;
+  });
   const push = (name: string, i: number, seed: Partial<Business> = {}) => {
     const back = strings.slice(Math.max(0, i - 3), i).map((x) => x.s.toLowerCase());
-    const sponsored = back.some((b) => b === "sponsored" || b === "ad" || b.startsWith("sponsored"));
+    const sponsored = sponsoredGroup[i] || back.some((b) => b === "sponsored" || b === "ad" || b.startsWith("sponsored"));
     const b: Business = { name: name.trim(), sponsored, dumpIdx, details: [], ...seed };
     found.push(b);
     titleAt.set(i, b);
@@ -284,7 +292,9 @@ export function parsePinTar(tarGz: Buffer, targetBusiness: string, expectedPacka
     if (CAPTCHA_RE.test(xml)) captcha = true;
     const strings = xmlStrings(xml, expectedPackage);
     for (const b of extractBusinesses(strings, idx)) {
-      const key = normName(b.name);
+      // A business may appear as both a paid card and an organic listing.
+      // Preserve each category instead of letting an earlier ad hide organic.
+      const key = `${b.sponsored ? "ad" : "organic"}:${normName(b.name)}`;
       if (key && !seen.has(key)) seen.set(key, b);
     }
   });

@@ -48,4 +48,18 @@ assert.equal(browserCard[0].rating, 4.7);
 assert.equal(browserCard[0].reviews, 105);
 const compactReviews = extractBusinesses(xmlStrings('<hierarchy><node content-desc="Just Love Coffee Cafe Rated 4.7 out of 5 1.2K reviews for Just Love Coffee Cafe" package="com.android.chrome"/></hierarchy>', "com.android.chrome"), 0);
 assert.equal(compactReviews[0].reviews, 1200);
+const groupedAds = extractBusinesses(xmlStrings(`<hierarchy>
+  <node text="Sponsored Results" />
+  <node content-desc="Scooter's Coffee Rated 4.4 out of 5 140 reviews" />
+  <node text="Menu" /><node text="Order" /><node text="View menu" /><node text="Read reviews" />
+  <node content-desc="7 Brew Coffee Rated 4.5 out of 5 144 reviews" />
+  <node text="Hide sponsored results" /><node text="Places" /><node text="Map" />
+  <node text="Sponsored" /><node text="Why this ad?" />
+  <node content-desc="Sponsored Cafe Rated 4.0 out of 5 20 reviews" />
+  <node text="Directions" /><node text="Website" /><node text="Menu" /><node text="Reviews" />
+  <node content-desc="Compassion Coffeehouse Rated 4.7 out of 5 105 reviews" />
+</hierarchy>`), 0);
+assert.deepEqual(groupedAds.map(b => [b.name, b.sponsored]), [
+  ["Scooter's Coffee", true], ["7 Brew Coffee", true], ["Sponsored Cafe", true], ["Compassion Coffeehouse", false],
+]);
 console.log("PASS: live Maps stars ratings, numeric business names, sponsored exclusion, review counts, legacy formats and non-rating text");
