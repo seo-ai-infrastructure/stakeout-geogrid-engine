@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { DelayedError, UnrecoverableError, type Job } from "bullmq";
 import { db, type DevicePool, type Prisma } from "@geogrid/db";
 import { env, MOBILE, DEVICE_RT_DIR, DEVICE_SCRIPT_PATH } from "./config.js";
-import { command, pullFile, pushScript, scriptOnDevice, setupDevice, updatePhones, RUN_PIN_MD5 } from "./duoplus.js";
+import { checkProxy, command, pullFile, pushScript, scriptOnDevice, setupDevice, updatePhones, RUN_PIN_MD5 } from "./duoplus.js";
+import { validateSavedProxy } from "./savedProxy.js";
 import { configureRotatingProxy, geoKey, type GeoTarget } from "./proxySeller.js";
 import { artifactKey, exists, getBuffer, presignPut, putBuffer } from "./r2.js";
 import { extendLease, releaseLease, sleep, tryLease } from "./redis.js";
@@ -46,6 +47,24 @@ export async function ensureDeviceReady(device: DevicePool, log: (m: string) => 
  * record changed) do we touch Proxy-Seller / DuoPlus proxy endpoints.
  */
 async function ensureRotatingProxy(device: DevicePool, target: GeoTarget, log: (m: string) => void): Promise<DevicePool> {
+  if (env.PROXY_MODE === "saved") {
+    try {
+      const check = await validateSavedProxy(device.proxyId, target, checkProxy);
+      await updatePhones([{ image_id: device.imageId, proxy: { id: device.proxyId, dns: 1 },
+        locale: { type: 2, timezone: check.timezone, language: "en-US" } }]);
+      await sleep(MOBILE.settleAfterProxyMs);
+      const updated = await db.devicePool.update({ where: { imageId: device.imageId }, data: {
+        proxyGeoKey: `saved:${geoKey(target)}`, proxyLogin: null, proxyRung: "SAVED",
+        proxyCheck: check.raw as Prisma.InputJsonValue, proxyConfiguredAt: new Date(),
+      } });
+      recordProxy(true, `${device.imageId}: saved proxy verified in ${check.city}, ${check.region}`);
+      log(`saved proxy verified in ${check.city}/${check.region}; provider settings preserved`);
+      return updated;
+    } catch (e) {
+      recordProxy(false, `${device.imageId}: ${(e as Error).message}`);
+      throw e;
+    }
+  }
   if (device.proxyGeoKey === geoKey(target) && device.proxyLogin) return device;
   let bound;
   try {
@@ -246,7 +265,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
         scanId, pinId, row: pin.rowIdx, col: pin.colIdx, lat: pin.lat, lng: pin.lng,
         keyword: scan.keyword, targetBusiness: scan.targetBusiness, surface, capturedAt,
         exit: {
-          rotation: env.PROXY_ROTATION === "request" ? "per-request" : `sticky ${env.PROXY_STICKY_MINUTES} min`,
+          rotation: env.PROXY_MODE === "saved" ? "provider-managed (saved proxy)" : env.PROXY_ROTATION === "request" ? "per-request" : `sticky ${env.PROXY_STICKY_MINUTES} min`,
           rung: device.proxyRung,
           sampleIp: pick("ip", "proxyIp", "proxy_ip", "public_ip"),
           city: pick("city"),
@@ -274,7 +293,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
           {
             ...report,
             device: device.imageId,
-            proxy: { rotation: report.exit.rotation, rung: device.proxyRung, port: 10000 + device.slotIndex, configuredAt: device.proxyConfiguredAt, sample: device.proxyCheck },
+            proxy: { mode: env.PROXY_MODE, rotation: report.exit.rotation, rung: device.proxyRung, port: env.PROXY_MODE === "saved" ? null : 10000 + device.slotIndex, configuredAt: device.proxyConfiguredAt, sample: device.proxyCheck },
             deviceMeta: parsed.meta,
             timings: { startedAt: new Date(t0).toISOString(), finishedAt: capturedAt, seconds: Math.round((Date.now() - t0) / 1000) },
             artifacts: { video: videoPresent ? videoKey : null, dumps: tarKey, serpXml: serpXmlKey, serpJson: serpJsonKey, serpHtml: serpHtmlKey },

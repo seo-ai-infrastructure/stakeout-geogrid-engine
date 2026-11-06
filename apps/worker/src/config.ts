@@ -9,6 +9,8 @@ const schema = z.object({
   DUOPLUS_API_KEY: z.string().default(""),
   DUOPLUS_BASE_URL: z.string().default("https://openapi.duoplus.net"),
 
+  /** saved preserves a provider-configured DuoPlus proxy; dynamic retargets Proxy-Seller. */
+  PROXY_MODE: z.enum(["dynamic", "saved"]).default("dynamic"),
   PROXY_SELLER_BASE_LOGIN: z.string().default(""),
   PROXY_SELLER_PASSWORD: z.string().default(""),
   PROXY_SELLER_HOST: z.string().default("us.res.proxy-seller.com"),
@@ -63,8 +65,10 @@ export const DEVICE_SCRIPT_PATH = `${DEVICE_RT_DIR}/run_pin.sh`;
 export const requireEnv = () => {
   const missing = [
     ["DUOPLUS_API_KEY", env.DUOPLUS_API_KEY],
-    ["PROXY_SELLER_BASE_LOGIN", env.PROXY_SELLER_BASE_LOGIN],
-    ["PROXY_SELLER_PASSWORD", env.PROXY_SELLER_PASSWORD],
+    ...(env.PROXY_MODE === "dynamic" ? [
+      ["PROXY_SELLER_BASE_LOGIN", env.PROXY_SELLER_BASE_LOGIN],
+      ["PROXY_SELLER_PASSWORD", env.PROXY_SELLER_PASSWORD],
+    ] : []),
     ["R2_ACCOUNT_ID", env.R2_ACCOUNT_ID],
     ["R2_ACCESS_KEY_ID", env.R2_ACCESS_KEY_ID],
     ["R2_SECRET_ACCESS_KEY", env.R2_SECRET_ACCESS_KEY],

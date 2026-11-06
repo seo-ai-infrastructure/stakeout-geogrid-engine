@@ -1,7 +1,7 @@
 import { Redis } from "ioredis";
 import { env, DEVICE_LEASE_SEC, DUOPLUS_MIN_INTERVAL_MS } from "./config.js";
 
-/** BullMQ-compatible connection (Upstash TLS via rediss://). */
+/** BullMQ connection to the configured Redis service; production uses Railway private networking. */
 export const connection = new Redis(env.REDIS_URL, {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
