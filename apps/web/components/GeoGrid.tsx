@@ -42,6 +42,7 @@ const OSM_STYLE: maplibregl.StyleSpecification = {
 export default function GeoGrid({ scanId }: { scanId: string }) {
   const [scan, setScan] = useState<ScanDto | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -53,6 +54,7 @@ export default function GeoGrid({ scanId }: { scanId: string }) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let alive = true;
     const load = async () => {
+      try {
       const res = await fetch(`/api/scans/${scanId}`, { cache: "no-store" });
       if (!alive) return;
       if (!res.ok) {
@@ -60,8 +62,11 @@ export default function GeoGrid({ scanId }: { scanId: string }) {
         return;
       }
       const data = (await res.json()) as ScanDto;
+      if (!alive) return;
+      setError(null);
       setScan(data);
       if (data.status === "RUNNING" || data.status === "QUEUED") timer = setTimeout(load, 5000);
+      } catch { if (alive) { setError("Connection lost. Retrying…"); timer = setTimeout(load, 5000); } }
     };
     void load();
     return () => {
@@ -84,12 +89,15 @@ export default function GeoGrid({ scanId }: { scanId: string }) {
         zoom: 11,
         attributionControl: {},
       });
+      setMapReady(true);
       mapRef.current.addControl(new ml.NavigationControl({ showCompass: false }), "top-left");
     });
     return () => {
       cancelled = true;
       mapRef.current?.remove();
       mapRef.current = null;
+      markers.current.clear();
+      fitted.current = false;
     };
   }, []);
 
@@ -110,7 +118,7 @@ export default function GeoGrid({ scanId }: { scanId: string }) {
           const open = () => setSelected(p.id);
           el.addEventListener("click", open);
           el.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" || e.key === " ") open();
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
           });
           const marker = new ml.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(map);
           entry = { marker, el };
@@ -134,7 +142,7 @@ export default function GeoGrid({ scanId }: { scanId: string }) {
         fitted.current = true;
       }
     });
-  }, [scan, selected]);
+  }, [scan, selected, mapReady]);
 
   const sel = scan?.pins.find((p) => p.id === selected) ?? null;
   const done = scan ? scan.completedPins + scan.failedPins : 0;

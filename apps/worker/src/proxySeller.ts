@@ -53,8 +53,8 @@ export function geoMatches(c: ProxyCheck, t: GeoTarget, rung: Rung): boolean {
   const region = norm(c.region);
   const city = norm(c.city);
   const stateOk =
-    !region || region === norm(t.stateCode) || region.includes(norm(STATE_NAMES[t.stateCode.toUpperCase()] ?? "\u0000"));
-  if (env.PROXY_GEO_MATCH === "city" && rung !== "STATE") return stateOk && (!city || city === norm(t.city.replace(/-/g, " ")));
+    !!region && (region === norm(t.stateCode) || region === norm(STATE_NAMES[t.stateCode.toUpperCase()] ?? ""));
+  if (env.PROXY_GEO_MATCH === "city" && rung !== "STATE") return stateOk && (!!city && city === norm(t.city.replace(/-/g, " ")));
   return stateOk;
 }
 

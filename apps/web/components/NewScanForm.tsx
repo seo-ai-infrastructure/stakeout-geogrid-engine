@@ -36,8 +36,10 @@ export default function NewScanForm({ creditBalance }: { creditBalance: number }
     setF((s) => ({ ...s, [k]: e.target.value }));
 
   async function submit() {
+    if (![f.keyword, f.targetBusiness, f.centerLat, f.centerLng, f.city, f.zip, f.ispId].every(v => v.trim())) { setErr("Complete every field before starting a scan."); return; }
     setBusy(true);
     setErr(null);
+    try {
     const res = await fetch("/api/scans", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -56,6 +58,7 @@ export default function NewScanForm({ creditBalance }: { creditBalance: number }
       return;
     }
     router.push(`/scans/${body.id}`);
+    } catch { setErr("Connection failed. Please try again."); } finally { setBusy(false); }
   }
 
   return (

@@ -85,9 +85,10 @@ export async function discoverPhones(log: (m: string) => void): Promise<Discover
       if (g === false) continue;
       if (g === undefined && !warnedNoGroupField) {
         warnedNoGroupField = true;
-        log(`the phone list has no group field, so DUOPLUS_GROUP_NAME can't filter; using every powered-on phone`);
+        log(`the phone list has no group field, so DUOPLUS_GROUP_NAME can't filter; skipping unclassified phones`);
       }
     }
+    if (env.DUOPLUS_GROUP_NAME && inGroup(row, env.DUOPLUS_GROUP_NAME) === undefined) { skipped.push(`${imageId}: group unknown`); continue; }
     if (!subscriptionActive(row)) {
       skipped.push(`${imageId} (${label ?? "no name"}): subscription expired`);
       continue;
@@ -105,24 +106,21 @@ export async function discoverPhones(log: (m: string) => void): Promise<Discover
   return { poweredOn: rows.length, active: found.map((p, i) => ({ ...p, slotIndex: i })), skipped };
 }
 
-/** Make DevicePool match the discovery: upsert active phones, remove the rest. */
+/** Keep slot assignments stable across discovery order and temporary outages. */
 export async function syncDevicePool(phones: DiscoveredPhone[]): Promise<void> {
-  const ids = phones.map((p) => p.imageId);
-  await db.devicePool.deleteMany({ where: { imageId: { notIn: ids } } });
-  await db.devicePool.updateMany({ where: { imageId: { in: ids } }, data: { slotIndex: { increment: 100_000 } } });
-  for (const p of phones) {
-    const existing = await db.devicePool.findUnique({ where: { imageId: p.imageId } });
-    const proxyChanged = existing && (existing.proxyId !== p.proxyId || existing.slotIndex - 100_000 !== p.slotIndex);
-    await db.devicePool.upsert({
-      where: { imageId: p.imageId },
-      create: { imageId: p.imageId, proxyId: p.proxyId, slotIndex: p.slotIndex, label: p.label },
-      update: {
-        proxyId: p.proxyId,
-        slotIndex: p.slotIndex,
-        label: p.label,
-        // a different proxy record or port means the rotating login must be set again
-        ...(proxyChanged ? { proxyGeoKey: null, proxyLogin: null, proxyRung: null, proxyCheck: Prisma.DbNull, proxyConfiguredAt: null } : {}),
-      },
-    });
-  }
+  await db.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(482031)`;
+    await tx.devicePool.updateMany({ where: { imageId: { notIn: phones.map(p => p.imageId) } }, data: { isEnabled: false } });
+    const highest = await tx.devicePool.aggregate({ _max: { slotIndex: true } });
+    let next = (highest._max.slotIndex ?? -1) + 1;
+    for (const p of phones) {
+      const existing = await tx.devicePool.findUnique({ where: { imageId: p.imageId } });
+      const proxyChanged = existing && existing.proxyId !== p.proxyId;
+      await tx.devicePool.upsert({
+        where: { imageId: p.imageId },
+        create: { imageId: p.imageId, proxyId: p.proxyId, slotIndex: next++, label: p.label, isEnabled: false },
+        update: { proxyId: p.proxyId, label: p.label, ...(proxyChanged ? { isEnabled: false, proxyGeoKey: null, proxyLogin: null, proxyRung: null, proxyCheck: Prisma.DbNull, proxyConfiguredAt: null } : {}) },
+      });
+    }
+  });
 }

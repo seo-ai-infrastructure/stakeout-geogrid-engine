@@ -1,3 +1,5 @@
+> Deployment update (2026-11-05): see README.md for the current Resend sign-in, private R2 access, Neon dispatch outbox and Railway Redis architecture. Earlier Clerk, public R2 and Vercel Redis instructions below are historical.
+
 # GeoGrid Engine — Technical Specification (`spec.md`)
 
 **Product:** Real-device, anti-detect GeoGrid local-rank intelligence SaaS

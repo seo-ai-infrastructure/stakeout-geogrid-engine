@@ -4,7 +4,7 @@
  * Uses relative imports only so scripts/ can reuse it outside Next.js.
  */
 export const PAYPAL_BASE =
-  process.env.PAYPAL_ENV === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
+  (process.env.PAYPAL_ENV === "live" || process.env.PAYPAL_API_BASE === "https://api-m.paypal.com") ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
 
 export class PayPalError extends Error {
   constructor(public status: number, public body: Record<string, unknown>) {
@@ -32,6 +32,7 @@ async function accessToken(): Promise<string> {
     },
     body: "grant_type=client_credentials",
     cache: "no-store",
+    signal: AbortSignal.timeout(12000),
   });
   const json = (await res.json()) as { access_token?: string; expires_in?: number };
   if (!res.ok || !json.access_token) throw new PayPalError(res.status, json as Record<string, unknown>);
@@ -55,6 +56,7 @@ export async function paypal<T = Record<string, unknown>>(
     headers,
     body: init.body === undefined ? undefined : typeof init.body === "string" ? init.body : JSON.stringify(init.body),
     cache: "no-store",
+    signal: AbortSignal.timeout(12000),
   });
   const text = await res.text();
   const json = (text ? JSON.parse(text) : {}) as Record<string, unknown>;

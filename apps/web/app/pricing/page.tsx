@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SignedIn, SignedOut, SignUpButton } from "@clerk/nextjs";
+import { requireUser } from "@/lib/auth";
 import BuyButton from "@/components/BuyButton";
 import { money, packs, perCredit, plans } from "@/lib/billing";
 import { site } from "@/lib/site";
@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 
 const GRIDS = [3, 5, 7, 9, 11];
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const user = await requireUser();
   const list = [...packs()].sort((a, b) => Number(a.price) - Number(b.price));
   const subs = plans();
   const best = [...list].sort((a, b) => Number(a.price) / a.credits - Number(b.price) / b.credits)[0];
@@ -51,14 +52,10 @@ export default function PricingPage() {
                   <td className="num">{perCredit(p)}</td>
                   <td className="num">{Math.floor(p.credits / 49)}</td>
                   <td>
-                    <SignedIn>
+                    {user && <>
                       <BuyButton kind="pack" id={p.id} label={`Buy ${p.name ?? p.label}`} primary={best?.id === p.id} />
-                    </SignedIn>
-                    <SignedOut>
-                      <SignUpButton mode="modal" forceRedirectUrl="/pricing">
-                        <button className={best?.id === p.id ? "btn" : "btn secondary"}>Create account to buy</button>
-                      </SignUpButton>
-                    </SignedOut>
+                    </>}
+                    {!user && <Link className={best?.id === p.id ? "btn" : "btn secondary"} href="/sign-in">Create account to buy</Link>}
                   </td>
                 </tr>
               ))}
@@ -75,9 +72,9 @@ export default function PricingPage() {
             {subs.map((s) => (
               <li key={s.planId}>
                 <strong>{s.label}</strong> <span className="muted">{money(s.price)} a month</span>{" "}
-                <SignedIn>
+                {user && <>
                   <BuyButton kind="plan" id={s.planId} label="Subscribe" />
-                </SignedIn>
+                </>}
               </li>
             ))}
           </ul>

@@ -7,7 +7,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY packages/db/package.json packages/db/
 COPY apps/worker/package.json apps/worker/
 COPY apps/web/package.json apps/web/
-RUN pnpm install --filter @geogrid/worker... --frozen-lockfile || pnpm install --filter @geogrid/worker...
+RUN pnpm install --filter @geogrid/worker... --frozen-lockfile
 COPY packages/db packages/db
 COPY apps/worker apps/worker
 RUN pnpm --filter @geogrid/db generate

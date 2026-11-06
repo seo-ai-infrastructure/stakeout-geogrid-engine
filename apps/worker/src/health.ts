@@ -5,6 +5,7 @@
  * opening Railway's logs. It also writes `health/worker.json` to R2 on boot, which
  * the status page fetches through the public R2 address to prove storage works.
  */
+import { db, type Prisma } from "@geogrid/db";
 import { kv } from "./redis.js";
 import { putBuffer } from "./r2.js";
 
@@ -28,6 +29,7 @@ export const health = {
   },
   proxy: { at: null as string | null, ok: null as boolean | null, message: null as string | null },
   pins: { completed: 0, failed: 0, lastOkAt: null as string | null, lastError: null as string | null, lastErrorAt: null as string | null },
+  queue: { ok: false, error: null as string | null },
   r2: { ok: null as boolean | null, error: null as string | null },
 };
 
@@ -47,11 +49,12 @@ export function recordPin(ok: boolean, error?: string) {
 }
 
 async function beat() {
+  try { health.queue = { ok: await kv.ping() === "PONG", error: null }; }
+  catch { health.queue = { ok: false, error: "Redis connection unavailable" }; }
   try {
-    await kv.set(HEALTH_KEY, JSON.stringify({ ...health, at: new Date().toISOString() }), "EX", 120);
-  } catch (e) {
-    console.error("heartbeat write failed", (e as Error).message);
-  }
+    const payload = JSON.parse(JSON.stringify({ ...health, at: new Date().toISOString() })) as Prisma.InputJsonValue;
+    await db.workerState.upsert({ where: { id: "worker" }, create: { id: "worker", payload }, update: { payload } });
+  } catch { console.error("Worker heartbeat could not be persisted"); }
 }
 
 export async function startHeartbeat(): Promise<ReturnType<typeof setInterval>> {

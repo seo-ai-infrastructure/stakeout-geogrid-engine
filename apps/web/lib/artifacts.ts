@@ -1,8 +1,7 @@
 /** Build a public URL for an R2 object key (keys are stored, domains are config). */
 export function artifactUrl(key: string | null | undefined): string | null {
   if (!key) return null;
-  const base = (process.env.NEXT_PUBLIC_R2_PUBLIC_DOMAIN ?? "").replace(/\/$/, "");
-  return base ? `${base}/${key}` : null;
+  return `/api/artifacts?key=${encodeURIComponent(key)}`;
 }
 
 export type RankBand = "top" | "mid" | "low" | "none" | "pending" | "failed";

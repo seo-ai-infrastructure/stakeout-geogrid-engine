@@ -1,27 +1,19 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse, type NextRequest } from "next/server";
 
-// PayPal must reach the webhook without a Clerk session.
-// /status and /api/health are protected by HEALTH_TOKEN instead of a Clerk session
-const isPublic = createRouteMatcher([
-  "/",
-  "/pricing",
-  "/terms",
-  "/privacy",
-  "/refunds",
-  "/status",
-  "/api/health",
-  "/api/webhooks(.*)",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-]);
-
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublic(req)) await auth.protect();
-});
-
-export const config = {
-  matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api|trpc)(.*)",
-  ],
-};
+// Authentication is checked against the database in every protected handler.
+// Origin checks cover all browser mutations; PayPal verifies its own signature.
+export default function middleware(req: NextRequest) {
+  if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && req.nextUrl.pathname !== "/api/webhooks/paypal") {
+    const origin = req.headers.get("origin");
+    const allowed = new Set([req.nextUrl.origin, process.env.NEXT_PUBLIC_APP_URL].filter(Boolean));
+    if (!origin || !allowed.has(origin) || req.headers.get("sec-fetch-site") === "cross-site") {
+      return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+    }
+  }
+  const res = NextResponse.next();
+  res.headers.set("Referrer-Policy", "no-referrer");
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("X-Frame-Options", "DENY");
+  return res;
+}
+export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"] };

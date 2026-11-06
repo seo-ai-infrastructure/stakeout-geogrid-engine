@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { DelayedError, UnrecoverableError, type Job } from "bullmq";
 import { db, type DevicePool, type Prisma } from "@geogrid/db";
 import { env, MOBILE, DEVICE_RT_DIR, DEVICE_SCRIPT_PATH } from "./config.js";
@@ -101,32 +102,47 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
   const { pinId, scanId } = job.data;
   const pin = await db.gridPin.findUnique({ where: { id: pinId }, include: { scan: true } });
   if (!pin) throw new UnrecoverableError(`pin ${pinId} not found`);
-  if (pin.status === "COMPLETED") return;
+  if (pin.scanId !== scanId) throw new UnrecoverableError("Pin and scan mismatch");
+  if (pin.status === "COMPLETED" || pin.status === "FAILED") return;
   const scan = pin.scan;
   const appArg = scan.targetType === "mobile_chrome" ? "chrome" : scan.targetType === "mobile_google" ? "google" : "maps";
   const surface = appArg === "chrome" ? "Chrome (Android)" : appArg === "google" ? "Google app (Android)" : "Google Maps (Android)";
 
   // lease a phone (no attempt consumed when none is free)
-  let device = await leaseDevice(pinId);
+  const owner = `${pinId}-${randomUUID()}`;
+  let device = await leaseDevice(owner);
   if (!device) {
     await job.moveToDelayed(Date.now() + 5000, token);
     throw new DelayedError();
   }
   const log = (m: string) => console.log(`[${scanId.slice(-6)}/${pin.rowIdx},${pin.colIdx} dev=${device!.imageId}] ${m}`);
 
-  await db.gridPin.update({
-    where: { id: pinId },
-    data: { status: "IN_PROGRESS", attempts: { increment: 1 }, assignedDeviceId: device.imageId, startedAt: new Date(), lastError: null },
-  });
-
   const tag = `${scanId}_${pinId}`;
-  const key = (name: string) => artifactKey(scanId, pin.rowIdx, pin.colIdx, name);
+  const key = (name: string) => artifactKey(scanId, pin.rowIdx, pin.colIdx, `${owner}/${name}`);
   const tarKey = key("dumps.tar.gz");
   const videoKey = key("video.mp4");
   const t0 = Date.now();
   let needsRebind = false;
 
+  let leaseLost = false;
+  let extending = false;
+  const leaseTimer = setInterval(async () => {
+    if (extending) return;
+    extending = true;
+    try { if (!await extendLease(device!.imageId, owner)) leaseLost = true; }
+    catch { leaseLost = true; }
+    finally { extending = false; }
+  }, 30_000);
+  const assertLease = async () => {
+    if (leaseLost || !await extendLease(device!.imageId, owner)) throw new Error("Device lease lost");
+  };
   try {
+  await db.gridPin.update({
+    where: { id: pinId },
+    data: { status: "IN_PROGRESS", attempts: { increment: 1 }, assignedDeviceId: device.imageId, startedAt: new Date(), lastError: null },
+  });
+
+    await db.gridScan.updateMany({ where: { id: scanId, status: "QUEUED" }, data: { status: "RUNNING" } });
     // proxy: already set for this scan area on all but the phone's first pin of the scan
     device = await ensureRotatingProxy(device, { zip: scan.zip, city: scan.city, stateCode: scan.stateCode, ispId: scan.ispId }, log);
 
@@ -135,7 +151,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
     await sleep(MOBILE.settleAfterUpdateMs);
 
     await ensureDeviceReady(device, log);
-    await extendLease(device.imageId, pinId);
+    await assertLease();
 
     // steps 2–7 run on the phone in one backgrounded script (clear → record → open → search → slow scroll → dump)
     const direct = !env.UNBIND_PROXY_BEFORE_UPLOAD;
@@ -154,7 +170,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
     let status = "";
     const deadline = Date.now() + MOBILE.tarPollMaxMs;
     while (Date.now() < deadline) {
-      await extendLease(device.imageId, pinId);
+      await assertLease();
       if (direct) {
         if (await exists(tarKey)) {
           tarBuf = await getBuffer(tarKey);
@@ -193,6 +209,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
     }
 
     // parse + CAPTCHA policy (with a rotating proxy the retry exits from a different IP)
+    await assertLease();
     const parsed = parsePinTar(tarBuf, scan.targetBusiness);
     if (parsed.captcha) {
       await db.devicePool.update({
@@ -201,6 +218,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
       });
       throw new Error("captcha detected in dumps; phone cooled down, pin will retry on another phone or IP");
     }
+    if (parsed.dumpCount === 0) throw new Error("No screen dumps were captured");
     let videoPresent = await exists(videoKey);
     const vDeadline = Date.now() + MOBILE.videoPollMaxMs;
     while (!videoPresent && Date.now() < vDeadline) {
@@ -256,7 +274,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
           {
             ...report,
             device: device.imageId,
-            proxy: { rotation: report.exit.rotation, rung: device.proxyRung, login: device.proxyLogin, port: 10000 + device.slotIndex, configuredAt: device.proxyConfiguredAt, sample: device.proxyCheck },
+            proxy: { rotation: report.exit.rotation, rung: device.proxyRung, port: 10000 + device.slotIndex, configuredAt: device.proxyConfiguredAt, sample: device.proxyCheck },
             deviceMeta: parsed.meta,
             timings: { startedAt: new Date(t0).toISOString(), finishedAt: capturedAt, seconds: Math.round((Date.now() - t0) / 1000) },
             artifacts: { video: videoPresent ? videoKey : null, dumps: tarKey, serpXml: serpXmlKey, serpJson: serpJsonKey, serpHtml: serpHtmlKey },
@@ -268,6 +286,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
       ),
     ]);
 
+    await assertLease();
     await completePin(pinId, scanId, {
       rankFound: parsed.rank,
       matchedDumpIdx: parsed.matchedDumpIdx,
@@ -286,10 +305,11 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
     });
     log(`done rank=${parsed.rank ?? "n/a"} listings=${parsed.businesses.length} stops=${parsed.stops} flags=${flags.join(",")} in ${Math.round((Date.now() - t0) / 1000)}s`);
   } finally {
+    clearInterval(leaseTimer);
     // if the proxy was left unbound (error mid-upload), force the next pin to set it up again
     await db.devicePool
       .update({ where: { imageId: device.imageId }, data: { lastUsedAt: new Date(), ...(needsRebind ? { proxyGeoKey: null } : {}) } })
       .catch(() => {});
-    await releaseLease(device.imageId, pinId);
+    await releaseLease(device.imageId, owner).catch(() => {});
   }
 }

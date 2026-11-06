@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SignUpButton } from "@clerk/nextjs";
+
 import HeroGrid from "./HeroGrid";
 import PinProof from "./PinProof";
 import { money, packs, perCredit } from "@/lib/billing";
@@ -16,14 +16,12 @@ export default function Landing() {
         <div className="hero-copy">
           <h1 className="display">Local rankings, recorded on a real phone.</h1>
           <p className="lede">
-            Every point on your grid is searched by a real Android phone standing in that neighborhood, on a home internet connection,
-            with GPS set to the exact spot. Each search is recorded on video, so your client sees exactly what a local customer sees.
+            Every point on your grid is searched by a real cloud Android phone using a residential proxy,
+            with GPS set to the exact spot. Each search is recorded on video, so your client can inspect the result captured during that session.
           </p>
           <div className="hero-actions">
             <Link className="btn" href="/pricing">See pricing</Link>
-            <SignUpButton mode="modal" forceRedirectUrl="/pricing">
-              <button className="btn secondary">Create an account</button>
-            </SignUpButton>
+            <Link className="btn secondary" href="/sign-in">Create an account</Link>
           </div>
           {site.sampleReportUrl && (
             <p className="small">
@@ -60,7 +58,7 @@ export default function Landing() {
               <tr>
                 <th scope="row">Where it comes from</th>
                 <td>A data center, often far from the business</td>
-                <td>A home internet connection in the same city, GPS on the exact point</td>
+                <td>A residential proxy targeted to the area, with GPS set to the grid point</td>
               </tr>
               <tr>
                 <th scope="row">Proof you can show</th>
@@ -70,7 +68,7 @@ export default function Landing() {
               <tr>
                 <th scope="row">Personalization</th>
                 <td>Not visible to you</td>
-                <td>Phone wiped before every search</td>
+                <td>Search app data cleared before every search</td>
               </tr>
             </tbody>
           </table>
@@ -90,7 +88,7 @@ export default function Landing() {
           </li>
           <li>
             <h3>Review the proof</h3>
-            <p>Click any point on the map to watch its video, see every business that ranked, and share the report.</p>
+            <p>Click any point on the map to watch its video, see every business that ranked, and download the report.</p>
           </li>
         </ol>
       </section>
@@ -128,7 +126,7 @@ export default function Landing() {
           </div>
           <div>
             <dt>How long does a scan take?</dt>
-            <dd>A 3×3 grid usually finishes in under 10 minutes. Larger grids take longer because every point is a full phone session, recorded start to finish.</dd>
+            <dd>Run time depends on the number of available phones, retries and network conditions. Larger grids take longer because every point is a full phone session, recorded start to finish.</dd>
           </div>
           <div>
             <dt>Do you need access to my Google Business Profile?</dt>

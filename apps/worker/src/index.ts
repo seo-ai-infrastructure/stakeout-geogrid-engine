@@ -6,9 +6,11 @@ import { closeRedis, connection } from "./redis.js";
 import { processMobilePin, type PinJobData } from "./mobile.js";
 import { failPin } from "./finalize.js";
 import { refreshDevices } from "./boot.js";
+import { dispatchPending, pinQueue } from "./dispatch.js";
 import { health, recordPin, startHeartbeat } from "./health.js";
 
 let worker: Worker<PinJobData> | null = null;
+let dispatchTimer: ReturnType<typeof setInterval> | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -38,7 +40,7 @@ function attachFailureHandling(w: Worker<PinJobData>) {
 /** Concurrency follows the phones that can run right now; zero phones pauses intake (scans wait in the queue). */
 function applyConcurrency(ready: number) {
   if (!worker) return;
-  const target = env.WORKER_CONCURRENCY ?? ready;
+  const target = Math.min(env.WORKER_CONCURRENCY ?? ready, ready);
   if (ready === 0) {
     if (!worker.isPaused()) {
       void worker.pause(true);
@@ -59,6 +61,9 @@ async function main() {
   requireEnv();
   heartbeatTimer = await startHeartbeat();
   const ready = await refreshDevices();
+  const dispatch = () => dispatchPending().catch(e => console.error("dispatch failed", e.message));
+  await dispatch();
+  dispatchTimer = setInterval(() => void dispatch(), 5000);
 
   worker = new Worker<PinJobData>(QUEUE_NAME, (job, token) => processMobilePin(job, token), {
     connection,
@@ -86,8 +91,10 @@ async function main() {
   const shutdown = async (sig: string) => {
     console.log(`${sig} received, closing worker…`);
     if (refreshTimer) clearInterval(refreshTimer);
+    if (dispatchTimer) clearInterval(dispatchTimer);
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     await worker?.close();
+    await pinQueue.close();
     await closeRedis();
     await db.$disconnect();
     process.exit(0);

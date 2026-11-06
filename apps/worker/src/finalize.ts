@@ -20,8 +20,9 @@ export type PinResult = {
 
 /** Mark a pin COMPLETED and finalize the scan if it was the last one. */
 export async function completePin(pinId: string, scanId: string, r: PinResult): Promise<void> {
-  const changed = await db.gridPin.updateMany({
-    where: { id: pinId, status: { not: "COMPLETED" } },
+  await db.$transaction(async tx => {
+  const changed = await tx.gridPin.updateMany({
+    where: { id: pinId, scanId, status: { in: ["PENDING", "IN_PROGRESS"] } },
     data: {
       status: "COMPLETED",
       rankFound: r.rankFound,
@@ -43,12 +44,13 @@ export async function completePin(pinId: string, scanId: string, r: PinResult): 
     },
   });
   if (changed.count !== 1) return; // already completed by another attempt — nothing to count
-  const scan = await db.gridScan.update({
+  const scan = await tx.gridScan.update({
     where: { id: scanId },
     data: { completedPins: { increment: 1 }, status: "RUNNING" },
     select: { completedPins: true, failedPins: true, totalPins: true },
   });
-  if (scan.completedPins + scan.failedPins >= scan.totalPins) await finalizeScan(scanId);
+  if (scan.completedPins + scan.failedPins >= scan.totalPins) await finalizeScan(tx, scanId);
+  });
 }
 
 /**
@@ -61,7 +63,7 @@ export async function failPin(pinId: string, scanId: string, error: string): Pro
   const cost = COST_PER_PIN[scan.targetType as TargetTypeKey] ?? 1;
   const counted = await db.$transaction(async (tx) => {
     const changed = await tx.gridPin.updateMany({
-      where: { id: pinId, status: { not: "FAILED" } },
+      where: { id: pinId, scanId, status: { in: ["PENDING", "IN_PROGRESS"] } },
       data: { status: "FAILED", lastError: error.slice(0, 1000), finishedAt: new Date() },
     });
     if (changed.count !== 1) return null;
@@ -69,22 +71,23 @@ export async function failPin(pinId: string, scanId: string, error: string): Pro
     await tx.creditLedger.create({
       data: { userId: scan.userId, amount: cost, reason: "PIN_REFUND", scanId, pinId },
     });
-    return tx.gridScan.update({
+    const counted = await tx.gridScan.update({
       where: { id: scanId },
       data: { failedPins: { increment: 1 }, creditsRefunded: { increment: cost } },
       select: { completedPins: true, failedPins: true, totalPins: true },
     });
+    if (counted.completedPins + counted.failedPins >= counted.totalPins) await finalizeScan(tx, scanId);
+    return counted;
   });
-  if (counted && counted.completedPins + counted.failedPins >= counted.totalPins) await finalizeScan(scanId);
 }
 
-export async function finalizeScan(scanId: string): Promise<void> {
-  const pins = await db.gridPin.findMany({ where: { scanId }, select: { status: true, rankFound: true } });
+async function finalizeScan(tx: Prisma.TransactionClient, scanId: string): Promise<void> {
+  const pins = await tx.gridPin.findMany({ where: { scanId }, select: { status: true, rankFound: true } });
   const m = computeMetrics(pins);
   const completed = pins.filter((p) => p.status === "COMPLETED").length;
   const failed = pins.filter((p) => p.status === "FAILED").length;
   const status = completed === 0 ? "FAILED" : failed === 0 ? "COMPLETED" : "PARTIAL";
-  await db.gridScan.update({
+  await tx.gridScan.update({
     where: { id: scanId },
     data: { ...m, status, completedAt: new Date() },
   });

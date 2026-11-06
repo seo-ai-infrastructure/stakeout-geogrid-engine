@@ -8,6 +8,8 @@ import { env } from "./config.js";
 import { command } from "./duoplus.js";
 import { ensureDeviceReady } from "./mobile.js";
 import { discoverPhones, syncDevicePool } from "./devices.js";
+import { randomUUID } from "node:crypto";
+import { tryLease, releaseLease } from "./redis.js";
 import { health, type PhoneHealth } from "./health.js";
 
 const log = (m: string) => console.log(`[boot] ${m}`);
@@ -95,9 +97,12 @@ export async function refreshDevices(): Promise<number> {
   for (const s of found.skipped) log(`skipped ${s}`);
   await syncDevicePool(found.active);
 
-  const devices = await db.devicePool.findMany({ orderBy: { slotIndex: "asc" } });
+  const devices = await db.devicePool.findMany({ where: { imageId: { in: found.active.map(p => p.imageId) } }, orderBy: { slotIndex: "asc" } });
   for (const d of devices) {
     if (checked.has(d.imageId) && d.isEnabled) continue;
+    const owner = `preflight-${randomUUID()}`;
+    if (!await tryLease(d.imageId, owner, 600)) continue;
+    try {
     log(`phone ${d.imageId} (${d.label ?? "no name"}) slot=${d.slotIndex} port=${10000 + d.slotIndex} proxy record=${d.proxyId}`);
     const pf = env.PREFLIGHT_ON_BOOT ? await preflight(d.imageId) : { ok: true, problems: [] };
     const passed = pf.ok;
@@ -117,6 +122,7 @@ export async function refreshDevices(): Promise<number> {
     await db.devicePool.update({ where: { imageId: d.imageId }, data: { isEnabled: ready } });
     if (ready) checked.add(d.imageId);
     else checked.delete(d.imageId);
+    } finally { await releaseLease(d.imageId, owner); }
   }
   for (const id of [...checked]) if (!devices.some((d) => d.imageId === id)) checked.delete(id);
 

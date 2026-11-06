@@ -10,6 +10,7 @@ export default function BuyButton({ kind, id, label, primary }: { kind: "pack" |
   async function go() {
     setBusy(true);
     setErr(null);
+    try {
     const res = await fetch(kind === "pack" ? "/api/billing/paypal/order" : "/api/billing/paypal/subscribe", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -22,6 +23,7 @@ export default function BuyButton({ kind, id, label, primary }: { kind: "pack" |
     }
     setBusy(false);
     setErr(json.error ?? "PayPal couldn't start the payment. Try again in a minute.");
+    } catch { setErr("Connection failed. Please try again."); } finally { setBusy(false); }
   }
 
   return (

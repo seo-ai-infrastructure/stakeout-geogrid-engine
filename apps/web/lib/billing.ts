@@ -29,7 +29,13 @@ function parseList<T>(raw: string | undefined, schema: z.ZodType<T>): T[] {
 }
 
 export const currency = () => process.env.PAYPAL_CURRENCY ?? "USD";
-export const packs = () => parseList(process.env.PAYPAL_PACKS_JSON, Pack);
+export const packs = (): CreditPack[] => {
+  if (process.env.PAYPAL_PACKS_JSON) return parseList(process.env.PAYPAL_PACKS_JSON, Pack);
+  return [500, 750, 3000, 7500].flatMap(credits => {
+    const cents = Number(process.env[`PAYPAL_PACK_${credits}_USD_CENTS`]);
+    return Number.isSafeInteger(cents) && cents > 0 ? [{ id: `pack_${credits}`, credits, price: (cents / 100).toFixed(2), label: `${credits.toLocaleString("en-US")} credits`, name: `${credits.toLocaleString("en-US")} credits` }] : [];
+  });
+};
 export const plans = () => parseList(process.env.PAYPAL_PLANS_JSON, Plan);
 export const findPack = (id: string) => packs().find((p) => p.id === id);
 export const findPlan = (planId: string) => plans().find((p) => p.planId === planId);
