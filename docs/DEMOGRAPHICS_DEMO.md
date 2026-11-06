@@ -29,11 +29,13 @@ Geometry is reprojected from the supplied NAD83 projection into WGS84 (EPSG:4326
 
 For the active filtered cohort:
 
-1. Standard SoLV = count of top-3 pins / visible pins.
+1. Standard SoLV = count of top-3 pins / filtered pins.
 2. Each represented tract has weight = owner-occupied unit estimate × median household income estimate.
-3. Divide that tract weight among its visible pins, then calculate top-3 weight / total usable weight.
+3. Divide that tract weight among its filtered pins, then calculate top-3 weight / total usable weight.
 4. Exclude missing and nonpositive weights; display weighted-pin coverage. Standard SoLV still includes a pin whose ranking exists but whose demographic weight is unavailable. With partial coverage these measures use different usable samples; do not interpret the delta as a like-for-like causal estimate.
 5. Report weighted minus standard in **percentage points**, not relative percent.
+
+Panning, zooming, tilt and rotation do not change this cohort. Scores include filtered pins outside the camera viewport.
 
 This is an exploratory area-level index, not measured household purchasing power, a forecast, or an official Census metric. Median income includes all households, whereas the count is owner-occupied homes. Splitting by pin avoids repeated tract counts but does not allocate tract households spatially within a tract. Displaying only part of a tract does not make its whole-population weight an estimate of residents inside the scan footprint.
 
@@ -55,15 +57,25 @@ MapLibre registers the PMTiles protocol once per mounted client group and releas
 
 For later R2 hosting, use a **separate public demographic asset bucket/domain** with GET/HEAD, CORS and Range support. Never expose the existing private receipt bucket. Changing hosting requires updating the source URL and verifying 206 responses and CORS from the deployed app origin.
 
+## 3D neighborhood view
+
+WebGL-capable browsers open on the central Lakeland pin at zoom 15.8, pitch 55° and bearing −25°. **3D buildings** focuses the selected pin's neighborhood; **2D grid** restores the full grid, zero pitch and north-up bearing. Reset reapplies the current view. Users can rotate with buttons or the compass, adjust tilt from 0–65°, and inspect the same pins and Census tracts in either view. Camera animations respect reduced-motion preferences. Cooperative gestures preserve ordinary page scrolling.
+
+Buildings use OpenFreeMap's OpenMapTiles `building` layer and its `render_height` / `render_min_height` attributes, following the [MapLibre extrusion example](https://maplibre.org/maplibre-gl-js/docs/examples/display-buildings-in-3d/) and [OpenMapTiles schema](https://openmaptiles.org/docs/schema/). The basemap source is reused when available; the documented `https://tiles.openfreemap.org/planet` TileJSON is the fallback source. This is an extruded footprint view, not photorealistic imagery or terrain. Heights are approximate, often derived from levels or other OSM attributes, and coverage varies. Buildings are not sourced from ACS, and no building's individual age or income is inferred from tract estimates.
+
+Missing, invalid and negative heights render no extrusion. `hide_3d` outlines are excluded, and bases are clamped between zero and total height. Buildings grow in between zooms 13 and 14; the neighborhood camera zooms closer so low-rise buildings are legible. Census fill and borders remain below buildings and labels. Rank circles and labels use viewport alignment to stay upright and readable while the map tilts and rotates. OpenFreeMap, OpenMapTiles and OpenStreetMap attribution remains visible.
+
+The 2D compatibility renderer keeps working without WebGL; it explicitly disables 3D and explains why. Building tiles are fetched by the basemap provider, while demographics remain in the same static PMTiles archive. No database, real-device worker or private evidence bucket is changed.
+
 ## Validation
 
 ```sh
 pnpm typecheck
-pnpm --filter @geogrid/worker exec node --import tsx ../../tests/demographics.test.ts
+pnpm --filter @geogrid/worker exec node --import tsx --test ../../tests/demographics.test.ts ../../tests/demographic-map-view.test.ts
 pnpm --filter web build
 ```
 
-Browser checks: all three layers and Off, both scenarios, opacity, income/homeowner filters including empty results, clear filters, map hover/click, keyboard pin selector, attribution, source notes, and no console errors from this page. Responsive layout stacks the inspector below the map at 760 px. If WebGL or tile delivery fails, selectors and the inspector remain available with an explicit error message.
+Browser checks: 3D/2D toggle, tilt, rotation, compass, selected-pin focus and reset where WebGL is available; all three layers and Off, both scenarios, opacity, income/homeowner filters including empty results, clear filters, map hover/click, keyboard pin selector, attribution, source notes, and no console errors from this page. Responsive layout stacks the inspector below the map at 760 px. If WebGL or tile delivery fails, selectors and the inspector remain available with an explicit error message.
 
 ## Browsers without WebGL
 
