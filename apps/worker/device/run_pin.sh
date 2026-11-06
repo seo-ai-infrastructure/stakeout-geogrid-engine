@@ -223,9 +223,17 @@ echo "t_end=$(date +%s)" >> "$D/meta.txt"
 cd "$PD" || exit 1
 TARLIST="$TAG/meta.txt $TAG/flags.txt"
 for f in "$TAG"/dump_*.xml; do [ -f "$f" ] && TARLIST="$TARLIST $f"; done
-if ! tar -czf "$PD/$TAG.tar.gz" $TARLIST 2>/dev/null; then
-  tar -cf "$PD/$TAG.tar" $TARLIST && gzip -f "$PD/$TAG.tar"
+ARCHIVE_TMP="$PD/$TAG.tar.gz.tmp"
+if ! tar -czf "$ARCHIVE_TMP" $TARLIST 2>/dev/null; then
+  if ! tar -cf "$PD/$TAG.tar" $TARLIST || ! gzip -c "$PD/$TAG.tar" > "$ARCHIVE_TMP"; then
+    echo packaging_failed > "$D/status"; exit 1
+  fi
 fi
+# Do not upload an empty or truncated archive as a successful capture.
+if [ ! -s "$ARCHIVE_TMP" ] || ! gzip -t "$ARCHIVE_TMP" 2>/dev/null; then
+  echo packaging_failed > "$D/status"; exit 1
+fi
+mv "$ARCHIVE_TMP" "$PD/$TAG.tar.gz" || { echo packaging_failed > "$D/status"; exit 1; }
 echo packaged > "$D/status"
 
 # ---- upload directly from the phone (presigned R2 PUT) -----------------------

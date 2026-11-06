@@ -51,7 +51,7 @@ const parser = new XMLParser({
 });
 
 /** Depth-first, document order == on-screen reading order for list UIs. */
-export function xmlStrings(xml: string): Str[] {
+export function xmlStrings(xml: string, expectedPackage?: string): Str[] {
   const out: Str[] = [];
   let doc: unknown;
   try {
@@ -74,7 +74,7 @@ export function xmlStrings(xml: string): Str[] {
     }
   };
   walk(doc);
-  return out.filter((x) => x.pkg !== "com.android.systemui");
+  return out.filter((x) => x.pkg !== "com.android.systemui" && (!expectedPackage || x.pkg === expectedPackage));
 }
 
 /* ------------------------------------------------------------------ */
@@ -157,14 +157,14 @@ export function extractBusinesses(strings: Str[], dumpIdx: number): Business[] {
       const m = DESC_WITH_RATING.exec(s);
       if (m && plausibleTitle(m[1])) {
         const rest = s.slice(m[0].length - 1);
-        const rating = /(\d(?:\.\d)?)\s*(?:stars?|★)/i.exec(s)?.[1];
-        const reviews = /(\d[\d,]*)\s*reviews?/i.exec(s)?.[1];
+        const rating = /(\d(?:\.\d)?)\s*(?:stars?|★|out of 5)/i.exec(s)?.[1];
+        const reviews = /(\d[\d,.]*[kK]?)\s*reviews?/i.exec(s)?.[1];
         const details = rest
           .split(/[,·]/)
           .map((x) => x.trim())
           .filter((x) => x && !/stars?|reviews?/i.test(x) && isDetail(x))
           .slice(0, 4);
-        push(m[1], i, { rating: rating ? Number(rating) : undefined, reviews: reviews ? num(reviews) : undefined, details });
+        push(m[1].replace(/\s+Rated$/i, ""), i, { rating: rating ? Number(rating) : undefined, reviews: reviews ? num(reviews) : undefined, details });
         continue;
       }
     }
@@ -253,7 +253,7 @@ export function assertRankingEvidence(parsed: Pick<ParsedPin, "dumpCount" | "bus
 
 const CAPTCHA_RE = /unusual traffic|not a robot|verify you are human|automated queries/i;
 
-export function parsePinTar(tarGz: Buffer, targetBusiness: string): ParsedPin {
+export function parsePinTar(tarGz: Buffer, targetBusiness: string, expectedPackage?: string): ParsedPin {
   const files = readTarGz(tarGz);
   const dumps = [...files.keys()]
     .filter((k) => /dump_\d+\.xml$/.test(k))
@@ -282,7 +282,7 @@ export function parsePinTar(tarGz: Buffer, targetBusiness: string): ParsedPin {
   dumps.forEach((k, idx) => {
     const xml = files.get(k)!.toString("utf8");
     if (CAPTCHA_RE.test(xml)) captcha = true;
-    const strings = xmlStrings(xml);
+    const strings = xmlStrings(xml, expectedPackage);
     for (const b of extractBusinesses(strings, idx)) {
       const key = normName(b.name);
       if (key && !seen.has(key)) seen.set(key, b);

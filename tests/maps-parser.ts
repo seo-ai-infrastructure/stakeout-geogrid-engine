@@ -21,6 +21,8 @@ const xml = `<hierarchy>
   <node text="4.7 stars (1,222)" package="com.google.android.apps.maps" />
 </hierarchy>`;
 const found = extractBusinesses(xmlStrings(xml), 0);
+assert.deepEqual(xmlStrings(xml, "com.android.chrome"), [], "Reject a different app's screen instead of relabelling it");
+assert.deepEqual(xmlStrings(xml, "com.google.android.apps.maps"), xmlStrings(xml));
 assert.deepEqual(found.map(b => [b.name, b.rating, b.reviews, b.sponsored]), [
   ["Scooter's Coffee", 4.4, 140, true],
   ["Compassion Coffeehouse", 4.7, 105, false],
@@ -40,4 +42,10 @@ const organic = found.filter(b => !b.sponsored);
 assert.throws(() => assertRankingEvidence({ dumpCount: 14, businesses: organic, rank: null }), /cannot establish a top-20/);
 assert.doesNotThrow(() => assertRankingEvidence({ dumpCount: 14, businesses: organic, rank: 2 }));
 assert.doesNotThrow(() => assertRankingEvidence({ dumpCount: 14, businesses: Array.from({ length: 20 }, (_, i) => ({ ...organic[0], name: `Cafe ${i}` })), rank: null }));
+const browserCard = extractBusinesses(xmlStrings('<hierarchy><node content-desc="Compassion Coffeehouse Rated 4.7 out of 5, 105 reviews, Coffee shop" package="com.android.chrome"/></hierarchy>', "com.android.chrome"), 0);
+assert.equal(browserCard[0].name, "Compassion Coffeehouse");
+assert.equal(browserCard[0].rating, 4.7);
+assert.equal(browserCard[0].reviews, 105);
+const compactReviews = extractBusinesses(xmlStrings('<hierarchy><node content-desc="Just Love Coffee Cafe Rated 4.7 out of 5 1.2K reviews for Just Love Coffee Cafe" package="com.android.chrome"/></hierarchy>', "com.android.chrome"), 0);
+assert.equal(compactReviews[0].reviews, 1200);
 console.log("PASS: live Maps stars ratings, numeric business names, sponsored exclusion, review counts, legacy formats and non-rating text");

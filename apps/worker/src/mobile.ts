@@ -125,6 +125,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
   if (pin.status === "COMPLETED" || pin.status === "FAILED") return;
   const scan = pin.scan;
   const appArg = scan.targetType === "mobile_chrome" ? "chrome" : scan.targetType === "mobile_google" ? "google" : "maps";
+  const appPackage = appArg === "chrome" ? "com.android.chrome" : appArg === "google" ? "com.google.android.googlequicksearchbox" : "com.google.android.apps.maps";
   const surface = appArg === "chrome" ? "Chrome (Android)" : appArg === "google" ? "Google app (Android)" : "Google Maps (Android)";
 
   // lease a phone (no attempt consumed when none is free)
@@ -162,6 +163,8 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
   });
 
     await db.gridScan.updateMany({ where: { id: scanId, status: "QUEUED" }, data: { status: "RUNNING" } });
+    const installed = await command([device.imageId], `pm path ${appPackage}`);
+    if (!/^package:\//m.test(installed)) throw new UnrecoverableError(`Required app ${appPackage} is not installed on device ${device.imageId}`);
     // proxy: already set for this scan area on all but the phone's first pin of the scan
     device = await ensureRotatingProxy(device, { zip: scan.zip, city: scan.city, stateCode: scan.stateCode, ispId: scan.ispId }, log);
 
@@ -229,7 +232,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
 
     // parse + CAPTCHA policy (with a rotating proxy the retry exits from a different IP)
     await assertLease();
-    const parsed = parsePinTar(tarBuf, scan.targetBusiness);
+    const parsed = parsePinTar(tarBuf, scan.targetBusiness, appPackage);
     if (parsed.captcha) {
       await db.devicePool.update({
         where: { imageId: device.imageId },
