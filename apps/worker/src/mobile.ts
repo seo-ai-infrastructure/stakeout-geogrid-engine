@@ -19,7 +19,8 @@ const PINS_DIR = `${DEVICE_RT_DIR}/pins`;
 
 async function leaseDevice(owner: string): Promise<DevicePool | null> {
   const candidates = await db.devicePool.findMany({
-    where: { isEnabled: true, cooldownUntil: { lte: new Date() } },
+    where: { isEnabled: true, cooldownUntil: { lte: new Date() },
+      ...(env.DUOPLUS_IMAGE_IDS.length ? { imageId: { in: env.DUOPLUS_IMAGE_IDS } } : {}) },
     orderBy: { lastUsedAt: "asc" },
   });
   for (const d of candidates) if (await tryLease(d.imageId, owner)) return d;
@@ -163,7 +164,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
   });
 
     await db.gridScan.updateMany({ where: { id: scanId, status: "QUEUED" }, data: { status: "RUNNING" } });
-    const installed = await command([device.imageId], `pm path ${appPackage}`);
+    const installed = await command([device.imageId], `pm path ${appPackage}; echo package_check_complete`);
     if (!/^package:\//m.test(installed)) throw new UnrecoverableError(`Required app ${appPackage} is not installed on device ${device.imageId}`);
     // proxy: already set for this scan area on all but the phone's first pin of the scan
     device = await ensureRotatingProxy(device, { zip: scan.zip, city: scan.city, stateCode: scan.stateCode, ispId: scan.ispId }, log);
@@ -213,7 +214,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
           }
           break;
         }
-        if (/upload_failed|no_curl/.test(status)) break;
+        if (/upload_failed|no_curl|packaging_failed/.test(status)) break;
       }
       await sleep(MOBILE.tarPollIntervalMs);
     }

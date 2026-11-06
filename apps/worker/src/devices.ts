@@ -80,6 +80,10 @@ export async function discoverPhones(log: (m: string) => void): Promise<Discover
     const r = row as Record<string, unknown>;
     const imageId = pickStr(r, ["image_id", "imageId", "id"]);
     if (!imageId) continue;
+    if (env.DUOPLUS_IMAGE_IDS.length && !env.DUOPLUS_IMAGE_IDS.includes(imageId)) {
+      skipped.push(`${imageId}: outside configured device allowlist`);
+      continue;
+    }
     const label = pickStr(r, ["name", "image_name", "remark", "title"]) ?? null;
     if (env.DUOPLUS_GROUP_NAME) {
       const g = inGroup(row, env.DUOPLUS_GROUP_NAME);

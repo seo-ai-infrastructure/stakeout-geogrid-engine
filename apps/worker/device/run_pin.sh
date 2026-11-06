@@ -230,7 +230,8 @@ if ! tar -czf "$ARCHIVE_TMP" $TARLIST 2>/dev/null; then
   fi
 fi
 # Do not upload an empty or truncated archive as a successful capture.
-if [ ! -s "$ARCHIVE_TMP" ] || ! gzip -t "$ARCHIVE_TMP" 2>/dev/null; then
+# Android Toybox gzip has no -t option; a full decompression checks integrity.
+if [ ! -s "$ARCHIVE_TMP" ] || ! gzip -dc "$ARCHIVE_TMP" >/dev/null 2>&1; then
   echo packaging_failed > "$D/status"; exit 1
 fi
 mv "$ARCHIVE_TMP" "$PD/$TAG.tar.gz" || { echo packaging_failed > "$D/status"; exit 1; }
