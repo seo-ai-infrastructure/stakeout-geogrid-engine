@@ -1,3 +1,15 @@
+import { createHash } from "node:crypto";
+
+/** Reject partial/corrupt command-API transfers before storing an artifact. */
+export function decodePulledFile(parts: string[], expectedBytes: number, expectedMd5: string): Buffer {
+  const data = Buffer.from(parts.join(""), "base64");
+  if (data.length !== expectedBytes) throw new Error("Device file transfer size mismatch");
+  if (!/^[a-f0-9]{32}$/i.test(expectedMd5) || createHash("md5").update(data).digest("hex") !== expectedMd5.toLowerCase()) {
+    throw new Error("Device file transfer checksum mismatch");
+  }
+  return data;
+}
+
 /** Normalize the provider response without serializing metadata or credentials. */
 export function normalizeOutput(data: unknown): string {
   if (data == null) return "";

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { env, DEVICE_RT_DIR, DEVICE_SCRIPT_PATH } from "./config.js";
 import { acquireDuoPlusSlot } from "./redis.js";
-import { normalizeOutput } from "./deviceOutput.js";
+import { decodePulledFile, normalizeOutput } from "./deviceOutput.js";
 
 /* ------------------------------------------------------------------ */
 /* Transport                                                           */
@@ -213,18 +213,20 @@ export async function scriptOnDevice(imageId: string): Promise<boolean> {
  * Pull a small file through the command API as base64 chunks (fallback when the
  * image has no curl). ~48 KB per call; dumps.tar.gz is typically 50–300 KB.
  */
-export async function pullFile(imageId: string, devicePath: string, maxBytes = 4 * 1024 * 1024): Promise<Buffer> {
+export async function pullFile(imageId: string, devicePath: string, maxBytes = 4 * 1024 * 1024, checkLease?: () => Promise<void>): Promise<Buffer> {
   const sizeOut = await command([imageId], `stat -c %s ${devicePath} 2>/dev/null || wc -c < ${devicePath}`);
   const size = parseInt(sizeOut.trim().split(/\s+/).pop() ?? "0", 10);
   if (!size || size > maxBytes) throw new Error(`pullFile: bad size ${sizeOut} for ${devicePath}`);
+  const md5 = (await command([imageId], `md5sum ${devicePath} | cut -d' ' -f1`)).trim();
   const chunk = 36_000; // raw bytes → 48 KB base64
   const parts: string[] = [];
   for (let off = 0; off < size; off += chunk) {
+    await checkLease?.();
     const out = await command(
       [imageId],
       `tail -c +${off + 1} ${devicePath} | head -c ${chunk} | base64 -w0`,
     );
     parts.push(out.replace(/\s+/g, ""));
   }
-  return Buffer.from(parts.join(""), "base64");
+  return decodePulledFile(parts, size, md5);
 }

@@ -248,12 +248,25 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
       await sleep(5000);
       videoPresent = await exists(videoKey);
     }
+    let videoViaCommand = false;
+    if (!videoPresent) {
+      // Residential upload can time out even when the small XML archive succeeds.
+      // Keep the phone leased and retrieve the completed recording independently.
+      await assertLease();
+      log("recovering video through command API after upload timeout");
+      const video = await pullFile(device.imageId, `${PINS_DIR}/${tag}/video.mp4`, 12 * 1024 * 1024, assertLease);
+      await assertLease();
+      await putBuffer(videoKey, video, "video/mp4");
+      videoPresent = await exists(videoKey);
+      videoViaCommand = videoPresent;
+    }
     // uploads went out without the proxy: re-bind only now, after the video has landed
     if (needsRebind) {
       await updatePhones([{ image_id: device.imageId, proxy: { id: device.proxyId, dns: 1 } }]);
       needsRebind = false;
     }
     const flags = [...parsed.flags];
+    if (videoViaCommand) flags.push("video_recovered_via_command");
     if (!videoPresent) throw new Error("Video receipt was not uploaded; retrying this pin");
 
     // step 7 outputs: merged XML, JSON listings, HTML recreation
