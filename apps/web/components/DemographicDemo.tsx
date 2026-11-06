@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import type { Map as GLMap, ExpressionSpecification, FilterSpecification, GeoJSONSource } from 'maplibre-gl';
 import type { FeatureCollection } from 'geojson';
 import demo from '@/data/demographics-demo.json';
@@ -17,6 +18,7 @@ const METRICS = {
   year_built: { label: 'Year built', title: 'Median year housing units were built', stops: [1955, 1978, 1998, 2018], colors: ['#a889c7', '#a8a1ca', '#8dbcc4', '#c6d9cf'], labels: ['1955', '1978', '1998', '2018'] },
 };
 const polygonLayers = ['demo-fill', 'demo-border', 'demo-highlight'];
+const CompatibilityMap = dynamic(() => import('./DemographicMapFallback'), { ssr: false });
 let protocolUsers = 0;
 type Selection = { pinId?: string; tractId?: string };
 
@@ -34,6 +36,8 @@ export default function DemographicDemo() {
   const mapRef = useRef<GLMap | null>(null);
   const [ready, setReady] = useState(false);
   const [mapError, setMapError] = useState('');
+  const [compatibility, setCompatibility] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
   const [metric, setMetric] = useState<MetricKey>('income');
   const [opacity, setOpacity] = useState(0.5);
   const [minOwners, setMinOwners] = useState(0);
@@ -65,6 +69,7 @@ export default function DemographicDemo() {
         releaseProtocol = () => { if (--protocolUsers === 0) gl.removeProtocol('pmtiles'); };
         const map = new gl.Map({ container: container.current, style: 'https://tiles.openfreemap.org/styles/dark', center: CENTER, zoom: 11.25, minZoom: 8, maxZoom: 16, attributionControl: { compact: true } });
         mapRef.current = map;
+        map.fitBounds([[-82.011, 27.9855], [-81.8886, 28.0935]], { padding: 45, maxZoom: 11.25, duration: 0 });
         map.addControl(new gl.NavigationControl({ showCompass: false }), 'top-right');
         map.addControl(new gl.ScaleControl({ unit: 'imperial' }), 'bottom-left');
         observer = new ResizeObserver(() => map.resize()); observer.observe(container.current);
@@ -96,8 +101,11 @@ export default function DemographicDemo() {
           setReady(true);
         });
       } catch (error) {
-        console.error('Demographic map startup:', error);
-        if (!disposed) setMapError(`The map could not start${error instanceof Error ? `: ${error.message}` : '.'} You can still inspect every sample pin with the selector.`);
+        if (!disposed) {
+          if (!(error instanceof Error) || !/WebGL|webgl/.test(error.message)) console.warn('Using the demographic compatibility map after initialization failed.');
+          mapRef.current?.remove(); mapRef.current = null;
+          observer?.disconnect(); setMapError(''); setCompatibility(true);
+        }
       }
     }
     void init();
@@ -146,8 +154,8 @@ export default function DemographicDemo() {
     </section>
     <div className="demo-workspace">
       <section className="demo-map-section" aria-label="Demographic map">
-        <div className="demo-map-toolbar"><span><span className="demo-live-dot" /> {config?.title ?? 'Rank pins only'}</span><button onClick={() => mapRef.current?.jumpTo({ center: CENTER, zoom: 11.25 })} disabled={!ready}>Reset view ↗</button></div>
-        <div className="demo-map-wrap"><div ref={container} className="demo-map-canvas" role="region" aria-label="Interactive Lakeland map. Use the pin selector for keyboard access to the same data." />{!ready && !mapError && <div className="demo-map-message" role="status">Loading the map and static Census tiles…</div>}{mapError && <div className="demo-map-message demo-map-error" role="alert">{mapError}</div>}<div className="demo-map-caption">Hover to inspect. Click a tract or pin to keep it selected.</div></div>
+        <div className="demo-map-toolbar"><span><span className="demo-live-dot" /> {config?.title ?? 'Rank pins only'}</span><button onClick={() => { mapRef.current?.fitBounds([[-82.011, 27.9855], [-81.8886, 28.0935]], { padding: 45, maxZoom: 11.25, duration: 0 }); setResetKey(key => key + 1); }} disabled={!ready}>Reset view ↗</button></div>
+        <div className="demo-map-wrap">{compatibility ? <CompatibilityMap tracts={TRACTS} pins={metrics.eligible} scenario={scenario} metric={metric} opacity={opacity} showAI={showAI} filters={{ minOwners, minIncome }} colors={(config ?? METRICS.income).colors} stops={(config ?? METRICS.income).stops} highlightId={selectedTract?.GEOID} focusPinId={locked.pinId} resetKey={resetKey} onHover={setHovered} onSelect={setLocked} onReady={() => setReady(true)} /> : <div ref={container} className="demo-map-canvas" role="region" aria-label="Interactive Lakeland map. Use the pin selector for keyboard access to the same data." />}{!ready && !mapError && <div className="demo-map-message" role="status">Loading the map and static Census data…</div>}{mapError && <div className="demo-map-message demo-map-error" role="alert">{mapError}</div>}<div className="demo-map-caption">Hover to inspect. Click a tract or pin to keep it selected.</div></div>
         <div className="demo-legends"><div className="demo-metric-legend">{config ? <><span>{config.title}</span><div className="demo-color-ramp">{config.colors.map((color, i) => <div key={color}><i style={{ background: color }} /><small>{config.labels[i]}</small></div>)}</div><small className="demo-missing-key"><i /> Missing estimate</small></> : <span>Demographic overlay is off. Filters still apply.</span>}</div><div className="demo-rank-legend"><span>Simulated rank</span><div><span><i style={{ background: '#6ce2ac' }} />1–3</span><span><i style={{ background: '#f1d27b' }} />4–10</span><span><i style={{ background: '#ef996f' }} />11–20</span><span><i style={{ background: '#b1b8c1' }} />20+</span></div><label><input type="checkbox" checked={showAI} onChange={e => setShowAI(e.target.checked)} /><i className="demo-ai-ring" /> Simulated AI citation rings</label></div></div>
       </section>
       <aside className="demo-inspector" aria-label="Neighborhood inspector">
@@ -158,7 +166,7 @@ export default function DemographicDemo() {
         <div className="demo-receipt-note"><span>DEMO DATA</span><p>These sample rankings have no phone recording. Live Stakeout scans attach the evidence receipt.</p></div>
       </aside>
     </div>
-    <section className="demo-filters" aria-label="Neighborhood filters"><div><h2>Focus the conversation.</h2><p>Filters update the map and both visibility scores.</p></div><label><span className="demo-label">Minimum homeowner share <b>{minOwners}%</b></span><input aria-label="Minimum homeowner share" type="range" min="0" max="90" step="10" value={minOwners} onChange={e => setMinOwners(Number(e.target.value))} /></label><label><span className="demo-label">Minimum household income</span><select value={minIncome} onChange={e => setMinIncome(Number(e.target.value))}><option value="0">All income estimates</option><option value="75000">$75,000+</option><option value="100000">$100,000+</option><option value="150000">$150,000+</option></select></label><button className="demo-reset" onClick={() => { setMinOwners(0); setMinIncome(0); }}>Clear filters</button></section>
-    <details className="demo-methods"><summary>Sources, score methodology &amp; demo limits <span>+</span></summary><div><section><h3>Real estimates. Matched vintage.</h3><p>{demo.metadata.tractCount} Polk County Census tracts combine <a href="https://www.census.gov/programs-surveys/acs/data/summary-file.Getting_Started.html" target="_blank" rel="noreferrer">2019–2023 ACS 5-year tables</a> with <a href={demo.metadata.sourceUrls[0]} target="_blank" rel="noreferrer">2023 Census cartographic boundaries</a>. Tables: B19013, B25077, B25003, B23025, B17001 and B25035. These historical estimates are not the latest release.</p><p>Coordinates use WGS84; the display uses Web Mercator. Boundaries are generalized at 1:500,000 and simplified in tiles. They are unsuitable for parcel or individual-household decisions. Pin joins use the original cartographic polygons, so a simplified display edge can differ slightly.</p></section><section><h3>What the scores measure</h3><p><b>Standard SoLV:</b> top-3 pins ÷ all visible sample pins. <b>Weighted SoLV:</b> top-3 weight ÷ total usable weight. Each represented tract receives a modeled weight of owner-occupied homes × median household income, divided equally among its visible pins to avoid counting that tract repeatedly.</p><p>The difference is in percentage points (pp). Missing or zero weights are excluded, never replaced with guessed values; coverage appears above. Rates use the table’s proper denominator. Ratio and composite-score margins of error are not calculated. Median year built refers to housing units, not residents’ age.</p></section><section><h3>A static pitch sandbox</h3><p>Both ranking patterns and every AI citation ring are simulated. Demographic controls run in your browser. A {(demo.metadata.tileBytes / 1048576).toFixed(2)} MB PMTiles archive supplies polygons through HTTP range requests; there are no Census API or database calls from this map. Base map: OpenFreeMap, OpenMapTiles and OpenStreetMap contributors.</p><p>Income and homeownership provide neighborhood context, not measured purchasing intent. A homeowner threshold does not identify industrial land or whether someone needs a roof. No demographic data is inferred about Google accounts.</p></section></div></details>
+    <section className="demo-filters" aria-label="Neighborhood filters"><div><h2>Focus the conversation.</h2><p>Filters update the map and both visibility scores.</p></div><label><span className="demo-label">Minimum homeowner share <b>{minOwners}%</b></span><input aria-label="Minimum homeowner share" type="range" min="0" max="90" step="10" value={minOwners} onChange={e => setMinOwners(Number(e.target.value))} /></label><label><span className="demo-label">Minimum tract median income</span><select value={minIncome} onChange={e => setMinIncome(Number(e.target.value))}><option value="0">All income estimates</option><option value="75000">$75,000+</option><option value="100000">$100,000+</option><option value="150000">$150,000+</option></select></label><button className="demo-reset" onClick={() => { setMinOwners(0); setMinIncome(0); }}>Clear filters</button></section>
+    <details className="demo-methods"><summary>Sources, score methodology &amp; demo limits <span>+</span></summary><div><section><h3>Real estimates. Matched vintage.</h3><p>{demo.metadata.tractCount} Polk County Census tracts combine <a href="https://www.census.gov/programs-surveys/acs/data/summary-file.Getting_Started.html" target="_blank" rel="noreferrer">2019–2023 ACS 5-year tables</a> with <a href={demo.metadata.sourceUrls[0]} target="_blank" rel="noreferrer">2023 Census cartographic boundaries</a>. Tables: B19013, B25077, B25003, B23025, B17001 and B25035. These historical estimates are not the latest release.</p><p>Coordinates use WGS84; the display uses Web Mercator. Boundaries are generalized at 1:500,000 and simplified in tiles. They are unsuitable for parcel or individual-household decisions. Pin joins use the original cartographic polygons, so a simplified display edge can differ slightly.</p></section><section><h3>What the scores measure</h3><p><b>Standard SoLV:</b> top-3 pins ÷ all visible sample pins. <b>Weighted SoLV:</b> top-3 weight ÷ total usable weight. Each represented tract receives a modeled weight of owner-occupied homes × median household income, divided equally among its visible pins to avoid counting that tract repeatedly.</p><p>The difference is in percentage points (pp). Weights describe whole represented tracts, not households inside the grid footprint. Missing or zero weights are excluded, never replaced with guessed values; coverage appears above. Rates use the table’s proper denominator. Ratio and composite-score margins of error are not calculated. Median year built refers to housing units, not residents’ age.</p></section><section><h3>A static pitch sandbox</h3><p>Both ranking patterns and every AI citation ring are simulated. Demographic controls run in your browser. A {(demo.metadata.tileBytes / 1048576).toFixed(2)} MB PMTiles archive supplies polygons through HTTP range requests; there are no Census API or database calls from this map. Base map: OpenFreeMap, OpenMapTiles and OpenStreetMap contributors. Browsers without WebGL use a 2D compatibility view with a small, simplified county geometry file and OpenStreetMap raster tiles.</p><p>Income and homeownership provide neighborhood context, not measured purchasing intent. A homeowner threshold does not identify industrial land or whether someone needs a roof. No demographic data is inferred about Google accounts.</p></section></div></details>
   </main>;
 }

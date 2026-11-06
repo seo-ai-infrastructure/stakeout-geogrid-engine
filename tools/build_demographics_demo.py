@@ -91,6 +91,9 @@ def main():
             pins.append({'id':f'R{row+1}C{col+1}','lat':lat,'lng':lng,'tractId':candidates[0] if candidates else None,'rankSouth':south[row*7+col],'rankNorth':south[(6-row)*7+col],'aiCited':row in (3,4,5) and col==3})
     out=ROOT/'apps/web/public/data'; out.mkdir(parents=True,exist_ok=True)
     geo=cache/'polk-demographics.geojson'; geo.write_text(json.dumps({'type':'FeatureCollection','features':features},separators=(',',':'),allow_nan=False))
+    # County-only fallback for browsers without WebGL. Never fetch national raw polygons in the UI.
+    fallback={'type':'FeatureCollection','features':[{'type':'Feature','properties':{'GEOID':f['properties']['GEOID']},'geometry':mapping(shape(f['geometry']).simplify(0.0001,preserve_topology=True))} for f in features]}
+    (out/'polk-demographics-fallback.geojson').write_text(json.dumps(fallback,separators=(',',':'),allow_nan=False))
     tiles=out/'polk-acs-2023.pmtiles'
     subprocess.run([args.tippecanoe,'-f','-o',str(tiles),'-l','demographics','-Z','8','-z','13','--no-feature-limit','--no-tile-size-limit','--detect-shared-borders',str(geo)],check=True)
     metadata={'vintage':'2019–2023 ACS 5-year estimates','boundaryYear':YEAR,'currencyYear':YEAR,'coverage':'Polk County, Florida','stateFips':'12','countyFips':'105','crs':'EPSG:4326','boundaryScale':'1:500,000 cartographic boundaries','sourceUrls':[BOUNDARY_URL]+[TABLE_BASE+f'acsdt5y{YEAR}-{t.lower()}.dat' for t in TABLES],'downloadedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'boundarySha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'tilesSha256':hashlib.sha256(tiles.read_bytes()).hexdigest(),'tileBytes':tiles.stat().st_size,'tractCount':len(tracts),'joinedPins':sum(p['tractId'] is not None for p in pins),'rankStatus':'simulated','aiCitationStatus':'simulated','tables':TABLES,'sourceSubsetHashes':{t:hashlib.sha256((cache/f'{t}-polk.json').read_bytes()).hexdigest() for t in TABLES}}

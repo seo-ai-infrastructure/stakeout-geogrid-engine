@@ -49,7 +49,7 @@ python -m venv /tmp/stakeout-demographics-env
 /tmp/stakeout-demographics-env/bin/python tools/build_demographics_demo.py --cache /tmp/stakeout-census-2023 --tippecanoe tippecanoe
 ```
 
-The script writes `apps/web/data/demographics-demo.json` and `apps/web/public/data/polk-acs-2023.pmtiles`. The JSON includes source URLs, retrieval/build time, boundary/table-subset/tile SHA-256 hashes, CRS and source coverage. The PMTiles archive preserves individual tract GEOIDs and properties; feature merging and dropping are disabled. Zooms 8–13 cover this county demo. A national production layer needs a separately tested zoom/bandwidth strategy.
+The script writes `apps/web/data/demographics-demo.json`, `apps/web/public/data/polk-acs-2023.pmtiles`, and a county-only `apps/web/public/data/polk-demographics-fallback.geojson`. The JSON includes source URLs, retrieval/build time, boundary/table-subset/tile SHA-256 hashes, CRS and source coverage. The PMTiles archive preserves individual tract GEOIDs and properties; feature merging and dropping are disabled. Zooms 8–13 cover this county demo. A national production layer needs a separately tested zoom/bandwidth strategy.
 
 MapLibre registers the PMTiles protocol once per mounted client group and releases it after the last instance unmounts. Map state synchronizes after load, including controls changed during loading. One static archive is served by Vercel with byte-range support; metric toggles mutate paint properties. Panning/zooming can fetch more tile ranges. There is no guarantee of a fixed frame rate and no claim of zero network activity.
 
@@ -64,3 +64,9 @@ pnpm --filter web build
 ```
 
 Browser checks: all three layers and Off, both scenarios, opacity, income/homeowner filters including empty results, clear filters, map hover/click, keyboard pin selector, attribution, source notes, and no console errors from this page. Responsive layout stacks the inspector below the map at 760 px. If WebGL or tile delivery fails, selectors and the inspector remain available with an explicit error message.
+
+## Browsers without WebGL
+
+If MapLibre initialization fails, a lazy-loaded Leaflet 1.9 compatibility map renders SVG polygons and DOM rank pins. It uses the same Census attributes, filters, formulas, and selections. The 139 KB static county-only fallback geometry is simplified at 0.0001 degrees with topology preservation; it is fetched once from the app, never from TIGERweb. This is deliberately limited to 174 tracts and is not a national raw-GeoJSON architecture. OpenStreetMap raster tiles load only for the visible viewport using normal browser caching and referrers, with visible attribution. See the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/). Do not use the community raster service for a national production rollout without arranging appropriate hosting.
+
+The verification browser has WebGL disabled. Browser interaction and visual QA therefore exercise the 2D compatibility renderer; PMTiles was independently decoded to verify all 174 GEOIDs and properties, and the deployed archive returns HTTP 206 byte ranges. WebGL rendering itself requires a WebGL-capable browser for visual verification.
