@@ -5,7 +5,7 @@
  */
 import { db, Prisma } from "@geogrid/db";
 import { env } from "./config.js";
-import { listPhones, type PhoneRow } from "./duoplus.js";
+import { listPhones, phoneInfo, type PhoneRow } from "./duoplus.js";
 
 export type DiscoveredPhone = { imageId: string; proxyId: string; label: string | null; slotIndex: number };
 export type Discovery = { poweredOn: number; active: DiscoveredPhone[]; skipped: string[] };
@@ -57,7 +57,8 @@ function inGroup(row: PhoneRow, group: string): boolean | undefined {
   const r = row as Record<string, unknown>;
   const names = ["group_name", "groupName", "group", "group_title"].map((k) => r[k]);
   const nested = r.group && typeof r.group === "object" ? pickStr(r.group as Record<string, unknown>, ["name", "title"]) : undefined;
-  const values = [...names.map(str), nested].filter(Boolean) as string[];
+  const groups = Array.isArray(r.group) ? r.group.map(g => g && typeof g === "object" ? pickStr(g, ["name", "title"]) : str(g)) : [];
+  const values = [...names.map(str), nested, ...groups].filter(Boolean) as string[];
   if (!values.length) return undefined; // the list doesn't report groups
   return values.some((v) => v.toLowerCase() === group.toLowerCase());
 }
@@ -93,9 +94,18 @@ export async function discoverPhones(log: (m: string) => void): Promise<Discover
       skipped.push(`${imageId} (${label ?? "no name"}): subscription expired`);
       continue;
     }
-    const proxyId = overrides[imageId] ?? boundProxyId(row);
+    let proxyId: string | undefined = overrides[imageId] ?? boundProxyId(row);
+    // The list endpoint omits proxy bindings; the details endpoint supplies them.
+    if (!proxyId) {
+      try { proxyId = boundProxyId(await phoneInfo(imageId)); }
+      catch { skipped.push(`${imageId}: could not read proxy binding`); continue; }
+    }
     if (!proxyId) {
       skipped.push(`${imageId} (${label ?? "no name"}): no saved proxy record bound; bind one in DuoPlus or add it to DEVICE_PROXY_IDS_JSON`);
+      continue;
+    }
+    if (found.some(p => p.proxyId === proxyId)) {
+      skipped.push(`${imageId}: proxy record is shared with another worker phone; use a separate record`);
       continue;
     }
     found.push({ imageId, proxyId, label });

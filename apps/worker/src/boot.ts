@@ -31,7 +31,6 @@ export const CHECKS: Array<[string, string, (out: string) => string]> = [
     (o) => {
       const missing = [...o.matchAll(/MISSING (\S+)/g)].map((m) => m[1]);
       if (!missing.length) return "PASS";
-      if (missing.length === 1 && missing[0] === "curl") return "WARN: no curl, scans work but videos are skipped";
       return `FAIL: missing ${missing.join(", ")}`;
     },
   ],

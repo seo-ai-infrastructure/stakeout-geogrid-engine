@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
+import { site } from "@/lib/site";
 import { appUrl, findPlan } from "@/lib/billing";
 import { approveLink, paypal, type Subscription } from "@/lib/paypal";
 
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
       plan_id: plan.planId,
       custom_id: user.id,
       application_context: {
-        brand_name: "GeoGrid Engine",
+        brand_name: site.name,
         user_action: "SUBSCRIBE_NOW",
         shipping_preference: "NO_SHIPPING",
         return_url: `${appUrl()}/api/billing/paypal/return?kind=sub`,

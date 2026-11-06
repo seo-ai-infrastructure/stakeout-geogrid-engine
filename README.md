@@ -4,8 +4,9 @@ Real Android search measurements with per-pin recordings and results. The curren
 
 ## Deployment
 
-- **Vercel:** root directory `apps/web`, Node 22, install `pnpm install --frozen-lockfile`, build `pnpm build`. Enable source files outside the root directory. Variables are documented in `apps/web/.env.example`.
-- **Railway worker:** repository root, Dockerfile `apps/worker/Dockerfile`, start `pnpm --filter @geogrid/worker boot`. Watch worker, database, and workspace configuration files. The boot command applies additive schema changes; inspect any schema change before deployment and never pass `--accept-data-loss`.
+- **Vercel:** root directory `apps/web`, Node 22, install `pnpm install --frozen-lockfile`, build `pnpm --filter @geogrid/db generate && pnpm build`. Enable source files outside the root directory. Variables are documented in `apps/web/.env.example`.
+- **Railway worker:** Set `DUOPLUS_GROUP_NAME` to the dedicated worker group. The phone details API resolves proxy bindings; each worker phone must have a distinct saved proxy record. Video and screen dumps are required for a completed pin.
+- **Railway build:** repository root, Dockerfile `apps/worker/Dockerfile`, start `pnpm --filter @geogrid/worker boot`. Watch worker, database, and workspace configuration files. The boot command applies additive schema changes; inspect any schema change before deployment and never pass `--accept-data-loss`.
 - **Railway Redis:** persistent `/data` volume, AOF enabled, `maxmemory-policy=noeviction`, no public TCP proxy. Worker `REDIS_URL=${{Redis.REDIS_URL}}`. Vercel does not need Redis access.
 - **Neon:** the web app and worker share the same production branch. `DATABASE_URL` uses its pooled endpoint; `DIRECT_URL` uses the direct endpoint. Use a separate branch for integration tests.
 - **R2:** keep the bucket private. The authenticated artifact endpoint checks scan ownership before issuing a 15-minute signed URL. No public bucket domain is required.

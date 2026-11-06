@@ -10,8 +10,14 @@ import { acquireDuoPlusSlot } from "./redis.js";
 /* ------------------------------------------------------------------ */
 
 export class DuoPlusError extends Error {
-  constructor(public endpoint: string, public payload: unknown) {
-    super(`DuoPlus ${endpoint}: ${JSON.stringify(payload).slice(0, 400)}`);
+  constructor(public endpoint: string, payload: unknown) {
+    const source = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+    const safe = Object.fromEntries(["httpStatus", "code", "message", "msg", "reason"].filter(k => source[k] !== undefined).map(k => [k, source[k]]));
+    let detail = JSON.stringify(safe);
+    for (const secret of [env.DUOPLUS_API_KEY, env.PROXY_SELLER_BASE_LOGIN, env.PROXY_SELLER_PASSWORD]) {
+      if (secret) detail = detail.replaceAll(secret, "[redacted]");
+    }
+    super(`DuoPlus ${endpoint}: ${detail.slice(0, 400)}`);
     this.name = "DuoPlusError";
   }
 }
@@ -44,6 +50,10 @@ async function post<T = unknown>(endpoint: string, body: Record<string, unknown>
 /* ------------------------------------------------------------------ */
 
 export type PhoneRow = { image_id?: string; id?: string; [k: string]: unknown };
+
+export async function phoneInfo(imageId: string): Promise<PhoneRow> {
+  return post<PhoneRow>("/api/v1/cloudPhone/info", { image_id: imageId });
+}
 
 export async function listPhones(): Promise<PhoneRow[]> {
   const data = await post<unknown>("/api/v1/cloudPhone/list", {
@@ -114,7 +124,16 @@ export async function checkProxy(proxyId: string): Promise<ProxyCheck> {
     city: pick(src, ["city"]),
     timezone: pick(src, ["timezone", "timeZone", "time_zone"]),
     isp: pick(src, ["isp", "org", "as"]),
-    raw: data,
+    // The provider includes proxy credentials in its response. Only evidence
+    // fields may be persisted or included in customer-visible artifacts.
+    raw: {
+      success: ok, ip,
+      country: pick(src, ["country", "countryCode", "country_code"]),
+      region: pick(src, ["region", "regionName", "province", "state", "state_code"]),
+      city: pick(src, ["city"]),
+      timezone: pick(src, ["timezone", "timeZone", "time_zone"]),
+      isp: pick(src, ["isp", "org", "as"]),
+    },
   };
 }
 

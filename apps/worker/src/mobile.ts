@@ -231,8 +231,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
       needsRebind = false;
     }
     const flags = [...parsed.flags];
-    if (!videoPresent) flags.push("video_missing");
-    if (parsed.dumpCount === 0) flags.push("no_dumps");
+    if (!videoPresent) throw new Error("Video receipt was not uploaded; retrying this pin");
 
     // step 7 outputs: merged XML, JSON listings, HTML recreation
     const sample = (device.proxyCheck ?? {}) as Record<string, unknown>;
