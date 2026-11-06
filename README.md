@@ -19,6 +19,16 @@ A scan, its pins, credit hold and dispatch rows commit atomically in Neon. Railw
 
 The status page distinguishes infrastructure availability from device readiness and untested proxy targeting. A running deployment alone does not establish that a real-device scan works.
 
+## Launch controls and acceptance
+
+`PLATFORM_ENABLED=false` in Vercel pauses new scans and new PayPal purchases at both the UI and API. Sign-in, balances, existing reports and payment notifications continue to work. Change it to `true` and redeploy only after a real phone scan produces readable listings and a playable video receipt.
+
+The November 6 deployment passed the production sign-in/session flow, authenticated scan creation, durable dispatch, all nine failed-pin refunds, private R2 upload and owner-only download, SMTP authentication, and PayPal approval-link creation. No test email was sent and no payment was approved or captured. Database integration checks passed on an isolated Neon branch.
+
+Live capture remains blocked by Proxy-Seller authentication: the configured login/password failed the provider connection check with and without location targeting. Replace `PROXY_SELLER_BASE_LOGIN` and `PROXY_SELLER_PASSWORD` in the Railway worker variables with a working residential proxy credential pair. Do not commit credentials. After redeployment, validate the proxy exit location and complete a small scan with playable video before resuming purchases. The dedicated DuoPlus group has three ready phones, each bound to a distinct saved proxy record.
+
+Before public sales, also supply the legal entity name and jurisdiction in Vercel and verify email inbox delivery and a buyer-approved PayPal transaction. Monthly subscriptions remain unconfigured; the four existing one-time credit packs are supported.
+
 ## Development and validation
 
 ```sh

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db, COST_PER_PIN } from "@geogrid/db";
 import { requireUser } from "@/lib/auth";
 import { buildGrid, GRID_SIZES } from "@/lib/grid";
+import { platformEnabled, unavailableMessage } from "@/lib/availability";
 
 
 export const runtime = "nodejs";
@@ -43,6 +44,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!platformEnabled()) return NextResponse.json({ error: unavailableMessage }, { status: 503 });
   const parsed = CreateScan.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid input", issues: parsed.error.issues }, { status: 400 });
   const input = parsed.data;
