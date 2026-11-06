@@ -64,7 +64,12 @@ dump() {
   # DuoPlusDumpUI can return only the Google app shell, omitting visible WebView
   # search results. Standard accessibility dumping exposes those result nodes.
   if [ "$APP" = google ]; then
-    uiautomator dump "$1" >/dev/null 2>&1 && [ -s "$1" ] && return 0
+    uiautomator dump "$1" >/dev/null 2>&1
+    dump_wait=0
+    while [ $dump_wait -lt 5 ]; do
+      [ -s "$1" ] && grep -q '</hierarchy>' "$1" && return 0
+      sleep 1; dump_wait=$((dump_wait+1))
+    done
     rm -f "$1"
   fi
   DuoPlusDumpUI "$1" >/dev/null 2>&1 && [ -s "$1" ] && return 0
@@ -174,6 +179,10 @@ rm -f "$RT/home.xml"
 prev=""; n=0
 while [ $n -lt 7 ]; do
   sleep 2; dump "$D/probe.xml"; cur=$(h "$D/probe.xml")
+  # An unchanged native shell is not evidence that the embedded results loaded.
+  if [ "$APP" = google ] && ! grep -qiE 'Search Results|Rated |stars|AI Overview' "$D/probe.xml"; then
+    prev=""; n=$((n+1)); continue
+  fi
   [ -n "$cur" ] && [ "$cur" = "$prev" ] && break
   prev=$cur; n=$((n+1))
 done
@@ -237,7 +246,13 @@ if ! tar -czf "$ARCHIVE_TMP" $TARLIST 2>/dev/null; then
 fi
 # Do not upload an empty or truncated archive as a successful capture.
 # Android Toybox gzip has no -t option; a full decompression checks integrity.
-if [ ! -s "$ARCHIVE_TMP" ] || ! gzip -dc "$ARCHIVE_TMP" >/dev/null 2>&1; then
+# Provider-side commands can return before their output is fully visible.
+archive_wait=0
+while [ $archive_wait -lt 5 ]; do
+  [ -s "$ARCHIVE_TMP" ] && gzip -dc "$ARCHIVE_TMP" >/dev/null 2>&1 && break
+  sleep 1; archive_wait=$((archive_wait+1))
+done
+if [ $archive_wait -ge 5 ]; then
   echo packaging_failed > "$D/status"; exit 1
 fi
 mv "$ARCHIVE_TMP" "$PD/$TAG.tar.gz" || { echo packaging_failed > "$D/status"; exit 1; }
