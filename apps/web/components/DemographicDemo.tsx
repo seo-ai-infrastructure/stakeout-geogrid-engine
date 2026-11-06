@@ -38,6 +38,7 @@ export default function DemographicDemo() {
   const [mapError, setMapError] = useState('');
   const [compatibility, setCompatibility] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  const [focusPinId, setFocusPinId] = useState<string | undefined>();
   const [metric, setMetric] = useState<MetricKey>('income');
   const [opacity, setOpacity] = useState(0.5);
   const [minOwners, setMinOwners] = useState(0);
@@ -135,6 +136,7 @@ export default function DemographicDemo() {
 
   const choosePin = (id: string) => {
     const pin = PINS.find(p => p.id === id);
+    setFocusPinId(pin?.id);
     setHovered(null); setLocked(pin ? { pinId: pin.id, tractId: pin.tractId ?? undefined } : {});
     if (pin && ready) mapRef.current?.easeTo({ center: [pin.lng, pin.lat], duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400 });
   };
@@ -155,7 +157,7 @@ export default function DemographicDemo() {
     <div className="demo-workspace">
       <section className="demo-map-section" aria-label="Demographic map">
         <div className="demo-map-toolbar"><span><span className="demo-live-dot" /> {config?.title ?? 'Rank pins only'}</span><button onClick={() => { mapRef.current?.fitBounds([[-82.011, 27.9855], [-81.8886, 28.0935]], { padding: 45, maxZoom: 11.25, duration: 0 }); setResetKey(key => key + 1); }} disabled={!ready}>Reset view ↗</button></div>
-        <div className="demo-map-wrap">{compatibility ? <CompatibilityMap tracts={TRACTS} pins={metrics.eligible} scenario={scenario} metric={metric} opacity={opacity} showAI={showAI} filters={{ minOwners, minIncome }} colors={(config ?? METRICS.income).colors} stops={(config ?? METRICS.income).stops} highlightId={selectedTract?.GEOID} focusPinId={locked.pinId} resetKey={resetKey} onHover={setHovered} onSelect={setLocked} onReady={() => setReady(true)} /> : <div ref={container} className="demo-map-canvas" role="region" aria-label="Interactive Lakeland map. Use the pin selector for keyboard access to the same data." />}{!ready && !mapError && !compatibility && <div className="demo-map-message" role="status">Loading the map and static Census data…</div>}{mapError && <div className="demo-map-message demo-map-error" role="alert">{mapError}</div>}<div className="demo-map-caption">Hover to inspect. Click a tract or pin to keep it selected.</div></div>
+        <div className="demo-map-wrap">{compatibility ? <CompatibilityMap tracts={TRACTS} pins={metrics.eligible} scenario={scenario} metric={metric} opacity={opacity} showAI={showAI} filters={{ minOwners, minIncome }} colors={(config ?? METRICS.income).colors} stops={(config ?? METRICS.income).stops} highlightId={selectedTract?.GEOID} focusPinId={focusPinId} resetKey={resetKey} onHover={setHovered} onSelect={setLocked} onReady={() => setReady(true)} /> : <div ref={container} className="demo-map-canvas" role="region" aria-label="Interactive Lakeland map. Use the pin selector for keyboard access to the same data." />}{!ready && !mapError && !compatibility && <div className="demo-map-message" role="status">Loading the map and static Census data…</div>}{mapError && <div className="demo-map-message demo-map-error" role="alert">{mapError}</div>}<div className="demo-map-caption">Hover to inspect. Click a tract or pin to keep it selected.</div></div>
         <div className="demo-legends"><div className="demo-metric-legend">{config ? <><span>{config.title}</span><div className="demo-color-ramp">{config.colors.map((color, i) => <div key={color}><i style={{ background: color }} /><small>{config.labels[i]}</small></div>)}</div><small className="demo-missing-key"><i /> Missing estimate</small></> : <span>Demographic overlay is off. Filters still apply.</span>}</div><div className="demo-rank-legend"><span>Simulated rank</span><div><span><i style={{ background: '#6ce2ac' }} />1–3</span><span><i style={{ background: '#f1d27b' }} />4–10</span><span><i style={{ background: '#ef996f' }} />11–20</span><span><i style={{ background: '#b1b8c1' }} />20+</span></div><label><input type="checkbox" checked={showAI} onChange={e => setShowAI(e.target.checked)} /><i className="demo-ai-ring" /> Simulated AI citation rings</label></div></div>
       </section>
       <aside className="demo-inspector" aria-label="Neighborhood inspector">

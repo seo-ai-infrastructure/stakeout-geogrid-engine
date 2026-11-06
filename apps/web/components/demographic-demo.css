@@ -48,7 +48,7 @@
 .demo-map-canvas .maplibregl-ctrl-scale { background: #132a2ed9; color: white; border-color: #c6d5d0; }
 .demo-map-canvas .maplibregl-ctrl-group button { min-height: 29px; border: 0; padding: 0; border-radius: 0; background: #fff; color: #000; }
 .demo-map-canvas .maplibregl-ctrl-attrib-button { min-height: 24px; border: 0; padding: 0; border-radius: 50%; }
-.demo-compat-map { background: #1b2b2e; isolation: isolate; font-family: inherit; }
+.demo-map-wrap .demo-compat-map { background: #1b2b2e; isolation: isolate; font-family: inherit; }
 .demo-context-label { color: #d5e4dc; font-size: 9px; text-align: center; text-shadow: 0 1px 3px #102527, 0 -1px 3px #102527; white-space: nowrap; pointer-events: none; }
 .demo-context-city { font-size: 13px; font-weight: 600; letter-spacing: .15em; }
 .demo-compat-map .leaflet-control-attribution, .demo-compat-map .leaflet-control-attribution a { color: #1a3734; }
