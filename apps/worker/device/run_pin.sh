@@ -61,6 +61,12 @@ splitnodes() {
 
 dump() {
   rm -f "$1"
+  # DuoPlusDumpUI can return only the Google app shell, omitting visible WebView
+  # search results. Standard accessibility dumping exposes those result nodes.
+  if [ "$APP" = google ]; then
+    uiautomator dump "$1" >/dev/null 2>&1 && [ -s "$1" ] && return 0
+    rm -f "$1"
+  fi
   DuoPlusDumpUI "$1" >/dev/null 2>&1 && [ -s "$1" ] && return 0
   uiautomator dump "$1" >/dev/null 2>&1
   [ -s "$1" ]
