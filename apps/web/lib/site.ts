@@ -6,7 +6,7 @@ export const site = {
   address: process.env.NEXT_PUBLIC_LEGAL_ADDRESS || "",
   jurisdiction: process.env.NEXT_PUBLIC_LEGAL_JURISDICTION || "",
   sampleReportUrl: process.env.NEXT_PUBLIC_SAMPLE_REPORT_URL || "",
-  legalUpdated: "November 5, 2026",
+  legalUpdated: "November 6, 2026",
 };
 
 /** The company as named in legal text; falls back to the brand until NEXT_PUBLIC_LEGAL_NAME is set. */

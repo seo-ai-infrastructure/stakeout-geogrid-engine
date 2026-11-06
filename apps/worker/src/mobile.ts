@@ -7,7 +7,7 @@ import { validateSavedProxy } from "./savedProxy.js";
 import { configureRotatingProxy, geoKey, type GeoTarget } from "./proxySeller.js";
 import { artifactKey, exists, getBuffer, presignPut, putBuffer } from "./r2.js";
 import { extendLease, releaseLease, sleep, tryLease } from "./redis.js";
-import { parsePinTar } from "./parse.js";
+import { parsePinTar, assertRankingEvidence } from "./parse.js";
 import { buildReport, mergeDumps, renderSerpHtml } from "./serp.js";
 import { completePin } from "./finalize.js";
 import { recordProxy } from "./health.js";
@@ -237,8 +237,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
       });
       throw new Error("captcha detected in dumps; phone cooled down, pin will retry on another phone or IP");
     }
-    if (parsed.dumpCount === 0) throw new Error("No screen dumps were captured");
-    if (parsed.businesses.length === 0) throw new Error("No organic listings were recognized; the capture cannot establish a ranking");
+    assertRankingEvidence(parsed);
     let videoPresent = await exists(videoKey);
     const vDeadline = Date.now() + MOBILE.videoPollMaxMs;
     while (!videoPresent && Date.now() < vDeadline) {

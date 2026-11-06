@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { extractBusinesses, xmlStrings } from "../apps/worker/src/parse.ts";
+import { assertRankingEvidence, extractBusinesses, xmlStrings } from "../apps/worker/src/parse.ts";
 
 // Reduced from UXsp5's live Maps UI dump on 2026-11-06; preserve title/rating order.
 const xml = `<hierarchy>
@@ -34,4 +34,10 @@ for (const [rating, expected] of [["4.8 (120)", 120], ["4.8 stars (1.2K)", 1200]
   assert.equal(cards[0].reviews, expected);
 }
 assert.equal(extractBusinesses(xmlStrings('<hierarchy><node text="Coffee shop"/><node text="1.7 mi"/><node text="5 days ago"/></hierarchy>'), 0).length, 0);
+assert.throws(() => assertRankingEvidence({ dumpCount: 0, businesses: [], rank: null }), /No screen dumps/);
+assert.throws(() => assertRankingEvidence({ dumpCount: 1, businesses: [], rank: null }), /No organic listings/);
+const organic = found.filter(b => !b.sponsored);
+assert.throws(() => assertRankingEvidence({ dumpCount: 14, businesses: organic, rank: null }), /cannot establish a top-20/);
+assert.doesNotThrow(() => assertRankingEvidence({ dumpCount: 14, businesses: organic, rank: 2 }));
+assert.doesNotThrow(() => assertRankingEvidence({ dumpCount: 14, businesses: Array.from({ length: 20 }, (_, i) => ({ ...organic[0], name: `Cafe ${i}` })), rank: null }));
 console.log("PASS: live Maps stars ratings, numeric business names, sponsored exclusion, review counts, legacy formats and non-rating text");

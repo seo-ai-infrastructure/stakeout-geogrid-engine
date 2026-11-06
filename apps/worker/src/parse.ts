@@ -242,6 +242,15 @@ export type ParsedPin = {
   meta: Record<string, string>;
 };
 
+/** An absent target is not a verified 20+ rank when the capture stopped early. */
+export function assertRankingEvidence(parsed: Pick<ParsedPin, "dumpCount" | "businesses" | "rank">): void {
+  if (parsed.dumpCount === 0) throw new Error("No screen dumps were captured");
+  if (parsed.businesses.length === 0) throw new Error("No organic listings were recognized; the capture cannot establish a ranking");
+  if (parsed.rank === null && parsed.businesses.length < 20) {
+    throw new Error(`Only ${parsed.businesses.length} organic listings were captured and the target was absent; cannot establish a top-20 ranking`);
+  }
+}
+
 const CAPTCHA_RE = /unusual traffic|not a robot|verify you are human|automated queries/i;
 
 export function parsePinTar(tarGz: Buffer, targetBusiness: string): ParsedPin {

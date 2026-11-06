@@ -5,12 +5,11 @@ import { operator, site } from "@/lib/site";
 export const metadata: Metadata = { title: "Privacy policy" };
 
 const PROVIDERS: Array<[string, string]> = [
-  ["Clerk", "account sign-up, sign-in and session cookies"],
+  ["Resend", "delivering account sign-in emails"],
   ["PayPal", "payments; PayPal handles your card or bank details, which we never receive"],
   ["Vercel", "hosting the website"],
-  ["Railway", "running the scan service"],
-  ["Neon", "the database holding accounts, credits and scan results"],
-  ["Upstash", "the queue that schedules scan points"],
+  ["Railway", "running the scan service and its private job queue"],
+  ["Neon", "the database holding accounts, sign-in sessions, credits and scan results"],
   ["Cloudflare", "storing scan videos and reports"],
   ["DuoPlus", "the cloud phones that run searches"],
   ["Proxy-Seller", "the residential internet connections the phones use"],
@@ -27,7 +26,7 @@ export default function PrivacyPage() {
 
       <h2>What we collect</h2>
       <ul>
-        <li><strong>Account details:</strong> your name, email address and sign-in information, through our sign-in provider.</li>
+        <li><strong>Account details:</strong> your name, email address and sign-in information.</li>
         <li><strong>Purchase records:</strong> what you bought, when, the amount, and PayPal&apos;s transaction ID. We don&apos;t receive card or bank details.</li>
         <li><strong>Scan inputs:</strong> keywords, business names, locations and grid settings you enter.</li>
         <li><strong>Scan results:</strong> rankings, screen recordings and saved results lists from public search pages.</li>
@@ -66,8 +65,8 @@ export default function PrivacyPage() {
 
       <h2>Sharing reports</h2>
       <p>
-        Each scan&apos;s videos and reports live at unguessable web addresses. Anyone you give a link to can open it, so share links only with
-        people you intend to.
+        Scan pages and evidence downloads require sign-in and scan ownership. Opening evidence creates a temporary download link that
+        expires after 15 minutes. Anyone with that temporary link can use it until it expires, so share it only with people you intend to.
       </p>
 
       <h2>How long we keep it</h2>

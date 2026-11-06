@@ -82,7 +82,7 @@ export default function PinDrawer({ pin, scan, onClose }: { pin: PinDto; scan: S
             <dt>Timezone</dt><dd>{tz || "–"}</dd>
           </dl>
           <p className="muted" style={{ fontSize: 12, margin: "6px 0 0" }}>
-            The phone&apos;s proxy rotates its IP within this area, so the sample IP was checked when the proxy was set up, not during this exact search.
+            This exit was checked before the search. Rotation follows the configured provider settings; the sampled IP may differ from the IP used during the search.
           </p>
 
           <h3>Results in order</h3>
