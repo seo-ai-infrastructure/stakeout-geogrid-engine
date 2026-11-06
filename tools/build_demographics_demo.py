@@ -3,7 +3,7 @@
 import argparse, concurrent.futures, csv, datetime, hashlib, io, json, math, pathlib, subprocess, urllib.request, zipfile
 import shapefile
 from pyproj import CRS, Transformer
-from shapely.geometry import Point, mapping, shape
+from shapely.geometry import Point, mapping, shape, box
 from shapely.ops import transform
 
 YEAR = 2023
@@ -42,6 +42,43 @@ def fetch_table(table, geoids, cache):
     path.write_text(json.dumps(found, sort_keys=True))
     print(f'{table}: {len(found)} matching tracts', flush=True)
     return found
+
+def build_context(cache, out):
+    extent = box(-82.18, 27.86, -81.72, 28.23)
+    context = []; sources = []; labels = []
+    for kind in ['roads', 'areawater']:
+        url=f'https://www2.census.gov/geo/tiger/TIGER{YEAR}/{kind.upper()}/tl_{YEAR}_12105_{kind}.zip'
+        path=cache/(kind+'.zip')
+        if not path.exists():
+            with urllib.request.urlopen(url,timeout=120) as response: path.write_bytes(response.read())
+        sources.append({'url':url,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
+        with zipfile.ZipFile(path) as z:
+            stem=f'tl_{YEAR}_12105_{kind}'
+            reader=shapefile.Reader(shp=io.BytesIO(z.read(stem+'.shp')),shx=io.BytesIO(z.read(stem+'.shx')),dbf=io.BytesIO(z.read(stem+'.dbf')))
+            project=Transformer.from_crs(CRS.from_wkt(z.read(stem+'.prj').decode()),'EPSG:4326',always_xy=True).transform
+            candidates={}
+            for record in reader.iterShapeRecords():
+                props=record.record.as_dict()
+                if kind=='roads' and props.get('MTFCC') not in ('S1100','S1200'): continue
+                geom=transform(project,shape(record.shape.__geo_interface__))
+                if not geom.is_valid: geom=geom.buffer(0)
+                if not geom.intersects(extent):continue
+                geom=geom.intersection(extent).simplify(0.00005,preserve_topology=True)
+                if geom.is_empty or (kind=='areawater' and geom.area<0.00001):continue
+                name=props.get('FULLNAME') or ''
+                feature={'type':'Feature','geometry':mapping(geom),'properties':{'kind':'road' if kind=='roads' else 'water','name':name,'class':props.get('MTFCC','')}}
+                context.append(feature)
+                score=geom.length if kind=='roads' else geom.area
+                if name and (name not in candidates or candidates[name][0]<score):
+                    center=geom.interpolate(0.5,normalized=True) if geom.geom_type in ('LineString','MultiLineString') else geom.representative_point()
+                    candidates[name]=(score,center)
+            for name,(_,point) in sorted(candidates.items(),key=lambda item:item[1][0],reverse=True)[:(7 if kind=='roads' else 12)]:
+                labels.append({'type':'Feature','geometry':mapping(point),'properties':{'kind':'label','name':name,'category':'road' if kind=='roads' else 'water'}})
+    context.extend(labels)
+    context.append({'type':'Feature','geometry':mapping(Point(-81.9498,28.0395)),'properties':{'kind':'label','name':'LAKELAND','category':'city'}})
+    target=out/'lakeland-context-2023.geojson'
+    target.write_text(json.dumps({'type':'FeatureCollection','features':context},separators=(',',':'),allow_nan=False))
+    return {'sources':sources,'extent':list(extent.bounds),'features':len(context),'bytes':target.stat().st_size,'sha256':hashlib.sha256(target.read_bytes()).hexdigest()}
 
 def main():
     parser = argparse.ArgumentParser()
@@ -90,6 +127,7 @@ def main():
             candidates=sorted(g for g,geom in polygons if geom.covers(Point(lng,lat)))
             pins.append({'id':f'R{row+1}C{col+1}','lat':lat,'lng':lng,'tractId':candidates[0] if candidates else None,'rankSouth':south[row*7+col],'rankNorth':south[(6-row)*7+col],'aiCited':row in (3,4,5) and col==3})
     out=ROOT/'apps/web/public/data'; out.mkdir(parents=True,exist_ok=True)
+    context_metadata=build_context(cache,out)
     geo=cache/'polk-demographics.geojson'; geo.write_text(json.dumps({'type':'FeatureCollection','features':features},separators=(',',':'),allow_nan=False))
     # County-only fallback for browsers without WebGL. Never fetch national raw polygons in the UI.
     fallback={'type':'FeatureCollection','features':[{'type':'Feature','properties':{'GEOID':f['properties']['GEOID']},'geometry':mapping(shape(f['geometry']).simplify(0.0001,preserve_topology=True))} for f in features]}
@@ -97,6 +135,7 @@ def main():
     tiles=out/'polk-acs-2023.pmtiles'
     subprocess.run([args.tippecanoe,'-f','-o',str(tiles),'-l','demographics','-Z','8','-z','13','--no-feature-limit','--no-tile-size-limit','--detect-shared-borders',str(geo)],check=True)
     metadata={'vintage':'2019–2023 ACS 5-year estimates','boundaryYear':YEAR,'currencyYear':YEAR,'coverage':'Polk County, Florida','stateFips':'12','countyFips':'105','crs':'EPSG:4326','boundaryScale':'1:500,000 cartographic boundaries','sourceUrls':[BOUNDARY_URL]+[TABLE_BASE+f'acsdt5y{YEAR}-{t.lower()}.dat' for t in TABLES],'downloadedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'boundarySha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'tilesSha256':hashlib.sha256(tiles.read_bytes()).hexdigest(),'tileBytes':tiles.stat().st_size,'tractCount':len(tracts),'joinedPins':sum(p['tractId'] is not None for p in pins),'rankStatus':'simulated','aiCitationStatus':'simulated','tables':TABLES,'sourceSubsetHashes':{t:hashlib.sha256((cache/f'{t}-polk.json').read_bytes()).hexdigest() for t in TABLES}}
+    metadata['mapContext']=context_metadata
     target=ROOT/'apps/web/data/demographics-demo.json'; target.parent.mkdir(parents=True,exist_ok=True)
     target.write_text(json.dumps({'metadata':metadata,'tracts':tracts,'pins':pins},separators=(',',':'),allow_nan=False)+'\n')
     print(json.dumps(metadata),flush=True)

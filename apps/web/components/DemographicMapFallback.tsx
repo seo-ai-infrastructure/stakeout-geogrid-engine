@@ -47,14 +47,23 @@ export default function DemographicMapFallback(props: Props) {
         map.current = m;
         L.control.zoom({ position: 'topright' }).addTo(m);
         L.control.scale({ imperial: true, metric: false, position: 'bottomleft' }).addTo(m);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>' }).addTo(m);
+        const contextPane = m.createPane('census-context');
+        contextPane.style.zIndex = '450'; contextPane.style.pointerEvents = 'none';
+        m.attributionControl.addAttribution('<a href="https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.2023.html" target="_blank" rel="noreferrer">U.S. Census Bureau · 2023 TIGER/Line</a>');
         m.fitBounds([[27.9855, -82.011], [28.0935, -81.8886]], { padding: [45, 45], maxZoom: 12, animate: false });
         observer = new ResizeObserver(() => m.invalidateSize()); observer.observe(container.current);
         m.on('movestart', () => current.current.onHover(null));
-        const response = await fetch('/data/polk-demographics-fallback.geojson', { signal: controller.signal });
-        if (!response.ok) throw new Error('Static geometry unavailable');
-        const data = await response.json() as FeatureCollection;
+        const responses = await Promise.all(['/data/polk-demographics-fallback.geojson', '/data/lakeland-context-2023.geojson'].map(url => fetch(url, { signal: controller.signal })));
+        if (responses.some(response => !response.ok)) throw new Error('Static geometry unavailable');
+        const [data, context] = await Promise.all(responses.map(response => response.json())) as [FeatureCollection, FeatureCollection];
         if (disposed) return;
+        L.geoJSON(context, { pane: 'census-context', interactive: false, filter: feature => feature.properties.kind !== 'label', style: feature => feature?.properties.kind === 'water' ? { color: '#426e80', weight: 0.6, fillColor: '#173b4b', fillOpacity: 1, opacity: 0.8 } : { color: '#b6c2b6', weight: feature?.properties.class === 'S1100' ? 2 : 1, opacity: 0.55 } }).addTo(m);
+        for (const feature of context.features) {
+          if (feature.properties?.kind !== 'label' || feature.geometry.type !== 'Point') continue;
+          const label = document.createElement('span'); label.textContent = String(feature.properties.name);
+          const [lng, lat] = feature.geometry.coordinates;
+          L.marker([lat, lng], { pane: 'census-context', interactive: false, keyboard: false, icon: L.divIcon({ className: `demo-context-label ${feature.properties.category === 'city' ? 'demo-context-city' : ''}`, html: label, iconSize: [130, 16], iconAnchor: [65, 8] }) }).addTo(m);
+        }
         setGeometry(data); current.current.onReady();
       } catch { if (!disposed) setError('The compatibility map could not load. The pin selector and Census inspector are still available.'); }
     })();
@@ -110,5 +119,5 @@ export default function DemographicMapFallback(props: Props) {
     if (pin && geometry) map.current?.panTo([pin.lat, pin.lng], { animate: false });
   }, [geometry, props.focusPinId]);
 
-  return <><div className="demo-map-canvas demo-compat-map" ref={container} role="region" aria-label="Interactive 2D Lakeland map" />{error && <div className="demo-map-message demo-map-error" role="alert">{error}</div>}<span className="demo-compat-badge">2D compatibility view</span></>;
+  return <><div className="demo-map-canvas demo-compat-map" ref={container} role="region" aria-label="Interactive 2D Lakeland map" />{!geometry && !error && <div className="demo-map-message" role="status">Loading static Census map…</div>}{error && <div className="demo-map-message demo-map-error" role="alert">{error}</div>}<span className="demo-compat-badge">2D view · Static Census map</span></>;
 }
