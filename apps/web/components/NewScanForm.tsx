@@ -20,7 +20,6 @@ export default function NewScanForm({ creditBalance }: { creditBalance: number }
     zip: "",
     city: "",
     stateCode: "FL",
-    ispId: "",
     gridSize: 3,
     spacingKm: 1.60934,
   });
@@ -36,7 +35,7 @@ export default function NewScanForm({ creditBalance }: { creditBalance: number }
     setF((s) => ({ ...s, [k]: e.target.value }));
 
   async function submit() {
-    if (![f.keyword, f.targetBusiness, f.centerLat, f.centerLng, f.city, f.zip, f.ispId].every(v => v.trim())) { setErr("Complete every field before starting a scan."); return; }
+    if (![f.keyword, f.targetBusiness, f.centerLat, f.centerLng, f.city, f.zip].every(v => v.trim())) { setErr("Complete every field before starting a scan."); return; }
     setBusy(true);
     setErr(null);
     try {
@@ -104,10 +103,6 @@ export default function NewScanForm({ creditBalance }: { creditBalance: number }
         <label>
           ZIP
           <input value={f.zip} onChange={set("zip")} placeholder="33801" inputMode="numeric" />
-        </label>
-        <label>
-          Proxy-Seller ISP id
-          <input value={f.ispId} onChange={set("ispId")} placeholder="e.g. 1234" />
         </label>
       </div>
       <div className="row">

@@ -3,7 +3,7 @@ import { checkProxy, updateProxy, type ProxyCheck } from "./duoplus.js";
 
 export type GeoTarget = { zip: string; city: string; stateCode: string; ispId: string };
 
-export type Rung = "ZIP+ISP" | "CITY+ISP" | "CITY" | "STATE";
+export type Rung = "ZIP+ISP" | "CITY+ISP" | "ZIP" | "CITY" | "STATE";
 
 /**
  * Proxy-Seller state subdivisions are numeric ids (e.g. _sd_1906), not postal codes.
@@ -36,8 +36,9 @@ export function buildLadder(t: GeoTarget, suffix: string, base = env.PROXY_SELLE
   const s = suffix;
   const sd = SD_IDS[t.stateCode.toUpperCase()];
   const ladder: Array<{ rung: Rung; login: string }> = [];
-  if (t.zip && t.ispId) ladder.push({ rung: "ZIP+ISP", login: `${base}_c_US_zip_${t.zip}_isp_${t.ispId}${s}` });
+  if (t.zip && t.ispId) ladder.push({ rung: "ZIP+ISP", login: `${base}_c_US_isp_${t.ispId}_zip_${t.zip}${s}` });
   if (city && t.ispId) ladder.push({ rung: "CITY+ISP", login: `${base}_c_US_city_${city}_isp_${t.ispId}${s}` });
+  if (t.zip) ladder.push({ rung: "ZIP", login: `${base}_c_US_zip_${t.zip}${s}` });
   if (city) ladder.push({ rung: "CITY", login: `${base}_c_US_city_${city}${s}` });
   if (sd) ladder.push({ rung: "STATE", login: `${base}_c_US_sd_${sd}${s}` });
   return ladder;

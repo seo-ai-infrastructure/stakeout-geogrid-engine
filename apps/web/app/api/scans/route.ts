@@ -18,7 +18,7 @@ const CreateScan = z.object({
   zip: z.string().trim().regex(/^\d{5}$/),
   city: z.string().trim().min(2).max(60),
   stateCode: z.string().trim().regex(/^[a-zA-Z]{2}$/).transform((s) => s.toUpperCase()),
-  ispId: z.string().trim().min(1).max(40),
+  ispId: z.string().trim().regex(/^\d*$/).max(40).default(""),
   gridSize: z.number().int().refine((n) => (GRID_SIZES as readonly number[]).includes(n), "gridSize must be 3,5,7,9 or 11"),
   spacingKm: z.number().min(0.25).max(10).default(1.60934),
 });

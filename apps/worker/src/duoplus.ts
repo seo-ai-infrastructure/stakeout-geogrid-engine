@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -150,8 +150,18 @@ export async function updatePhones(images: PhoneUpdate[]): Promise<void> {
 
 /** Run a shell command (< 10 s) on one or more phones; returns stdout text. */
 export async function command(imageIds: string[], cmd: string): Promise<string> {
-  const data = await post<unknown>("/api/v1/cloudPhone/command", { image_ids: imageIds, command: cmd });
-  return normalizeOutput(data);
+  const run = async (text: string) => normalizeOutput(await post<unknown>("/api/v1/cloudPhone/command", { image_ids: imageIds, command: text }));
+  if (Buffer.byteLength(cmd, "utf8") <= 1000) return run(cmd);
+  // The API caps command bodies at 1024 characters. Presigned capture URLs
+  // can exceed that limit; stage a short-lived script using bounded chunks.
+  const file = `/data/local/tmp/stakeout-${randomUUID()}`;
+  try {
+    await run(`: > ${file}.b64`);
+    for (const chunk of Buffer.from(cmd, "utf8").toString("base64").match(/.{1,700}/g) ?? []) {
+      await run(`echo '${chunk}' >> ${file}.b64`);
+    }
+    return await run(`base64 -d ${file}.b64 > ${file}.sh && sh ${file}.sh`);
+  } finally { await run(`rm -f ${file}.b64 ${file}.sh`).catch(() => {}); }
 }
 
 function normalizeOutput(data: unknown): string {
@@ -188,10 +198,10 @@ export async function setupDevice(imageId: string): Promise<void> {
   );
 }
 
-/** Push run_pin.sh as ≤1.5 KB base64 chunks (command body stays small, each call < 10 s). */
+/** Push run_pin.sh below the provider's 1024-character command limit. */
 export async function pushScript(imageId: string): Promise<void> {
   const b64 = Buffer.from(RUN_PIN_SH, "utf8").toString("base64");
-  const chunks = b64.match(/.{1,1500}/g) ?? [];
+  const chunks = b64.match(/.{1,700}/g) ?? [];
   const tmp = `${DEVICE_RT_DIR}/run_pin.b64`;
   await command([imageId], `mkdir -p ${DEVICE_RT_DIR} && : > ${tmp} && echo begin`);
   for (const c of chunks) await command([imageId], `echo '${c}' >> ${tmp}`);
