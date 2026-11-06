@@ -27,16 +27,16 @@ export default function PinProof() {
       </div>
       <dl className="proof-list">
         <div>
-          <dt>A video of the whole search</dt>
-          <dd>45 seconds per point: the app opening, the query typed, and a slow scroll to the bottom of the results.</dd>
+          <dt>A video clip from the phone session</dt>
+          <dd>A 45-second recording starts before the app opens. Longer searches can continue beyond the video; captured screen reports provide additional evidence.</dd>
         </div>
         <div>
           <dt>Recorded location settings</dt>
           <dd>The phone&apos;s GPS is set to the exact point and its traffic uses a residential proxy targeted to the area. The report includes the checked exit location.</dd>
         </div>
         <div>
-          <dt>The full results list, saved</dt>
-          <dd>Every business the phone saw, in order, with ratings and review counts, as a shareable report plus JSON and XML for your own reporting.</dd>
+          <dt>Captured listings, saved</dt>
+          <dd>Listings captured on screen, with available ratings and review counts, as a downloadable report plus JSON and XML for your own reporting.</dd>
         </div>
         <div>
           <dt>A fresh app session</dt>

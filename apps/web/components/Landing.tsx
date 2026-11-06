@@ -63,7 +63,7 @@ export default function Landing() {
               <tr>
                 <th scope="row">Proof you can show</th>
                 <td>A rank number</td>
-                <td>A 45-second video, the full results list and the connection details</td>
+                <td>A 45-second video clip, captured listings and the connection details</td>
               </tr>
               <tr>
                 <th scope="row">Personalization</th>
@@ -84,11 +84,11 @@ export default function Landing() {
           </li>
           <li>
             <h3>Phones search every point</h3>
-            <p>Each point gets its own phone session: GPS moved to the point, app wiped, search typed, results scrolled to the end.</p>
+            <p>Each point gets its own phone session: GPS moved to the point, app wiped, search typed, and results captured across scroll stops.</p>
           </li>
           <li>
             <h3>Review the proof</h3>
-            <p>Click any point on the map to watch its video, see every business that ranked, and download the report.</p>
+            <p>Click any completed point on the map to watch its video clip, inspect captured listings, and download the report.</p>
           </li>
         </ol>
       </section>
@@ -126,7 +126,7 @@ export default function Landing() {
           </div>
           <div>
             <dt>How long does a scan take?</dt>
-            <dd>Run time depends on the number of available phones, retries and network conditions. Larger grids take longer because every point is a full phone session, recorded start to finish.</dd>
+            <dd>Run time depends on the number of available phones, retries and network conditions. Larger grids take longer because every point requires a separate phone session.</dd>
           </div>
           <div>
             <dt>Do you need access to my Google Business Profile?</dt>
