@@ -7,10 +7,11 @@ import { db } from "@geogrid/db";
 import { env } from "./config.js";
 import { command } from "./duoplus.js";
 import { ensureDeviceReady } from "./mobile.js";
-import { discoverPhones, syncDevicePool } from "./devices.js";
+import { discoverPhones, syncDevicePool, wakePendingDevices } from "./devices.js";
 import { randomUUID } from "node:crypto";
 import { tryLease, releaseLease } from "./redis.js";
 import { health, type PhoneHealth } from "./health.js";
+import { checkScreenDump } from "./screenPreflight.js";
 
 const log = (m: string) => console.log(`[boot] ${m}`);
 
@@ -19,11 +20,6 @@ export const CHECKS: Array<[string, string, (out: string) => string]> = [
     "build",
     "getprop ro.build.version.release; getprop ro.debuggable",
     (o) => (/^1$/m.test(o) ? "PASS (debuggable)" : "PASS (not debuggable: Chrome first-run screens are tapped away instead)"),
-  ],
-  [
-    "screen dump",
-    "DuoPlusDumpUI /data/local/tmp/t.xml >/dev/null 2>&1 && echo DP_OK; uiautomator dump /data/local/tmp/u.xml >/dev/null 2>&1 && echo UIA_OK",
-    (o) => (o.includes("DP_OK") ? "PASS" : o.includes("UIA_OK") ? "PASS (uiautomator fallback)" : "FAIL: no way to read the screen"),
   ],
   [
     "tools",
@@ -57,6 +53,9 @@ export const CHECKS: Array<[string, string, (out: string) => string]> = [
 async function preflight(imageId: string): Promise<{ ok: boolean; problems: string[] }> {
   let ok = true;
   const problems: string[] = [];
+  const screen = await checkScreenDump(imageId, command);
+  log(`check ${imageId} screen dump    ${screen}`);
+  if (screen.startsWith("FAIL")) { ok = false; problems.push(`screen dump: ${screen}`); }
   for (const [name, cmd, verdict] of CHECKS) {
     try {
       const v = verdict(await command([imageId], cmd));
@@ -83,6 +82,8 @@ const checked = new Set<string>();
  * phones can run at once (the worker's concurrency).
  */
 export async function refreshDevices(): Promise<number> {
+  try { await wakePendingDevices(log); }
+  catch (e) { log(`automatic startup unavailable: ${(e as Error).message.slice(0, 200)}`); }
   let found;
   try {
     found = await discoverPhones(log);

@@ -251,7 +251,8 @@ export type ParsedPin = {
 };
 
 /** An absent target is not a verified 20+ rank when the capture stopped early. */
-export function assertRankingEvidence(parsed: Pick<ParsedPin, "dumpCount" | "businesses" | "rank">): void {
+export function assertRankingEvidence(parsed: Pick<ParsedPin, "dumpCount" | "businesses" | "rank"> & Partial<Pick<ParsedPin, "flags">>): void {
+  if (parsed.flags?.includes("recording_incomplete")) throw new Error("Video recording did not cover the complete screen capture");
   if (parsed.dumpCount === 0) throw new Error("No screen dumps were captured");
   if (parsed.businesses.length === 0) throw new Error("No organic listings were recognized; the capture cannot establish a ranking");
   if (parsed.rank === null && parsed.businesses.length < 20) {

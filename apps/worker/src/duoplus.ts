@@ -68,6 +68,23 @@ export async function listPhones(): Promise<PhoneRow[]> {
   return Array.isArray(list) ? list : [];
 }
 
+export async function listStoppedSubscriptionPhones(imageIds: string[]): Promise<PhoneRow[]> {
+  const data = await post<{ list?: PhoneRow[] }>("/api/v1/cloudPhone/list", {
+    image_id: imageIds, link_status: ["2"], adb_status: ["1"], start_phone_type: ["1", "2"], pagesize: 100,
+  });
+  return Array.isArray(data?.list) ? data.list : [];
+}
+
+export async function listAvailableStartupPlans(): Promise<Record<string, unknown>[]> {
+  const data = await post<{ list?: Record<string, unknown>[] }>("/api/v1/subscriptionStartup/list", { free_status: 1, pagesize: 100 });
+  return Array.isArray(data?.list) ? data.list : [];
+}
+
+export async function powerOnPhone(imageId: string): Promise<void> {
+  const data = await post<{ success?: string[]; fail_reason?: Record<string, string> }>("/api/v1/cloudPhone/powerOn", { image_ids: [imageId] });
+  if (!data?.success?.includes(imageId)) throw new DuoPlusError("/api/v1/cloudPhone/powerOn", { reason: data?.fail_reason?.[imageId] ?? "Startup was not accepted" });
+}
+
 export async function updateProxy(p: {
   id: string;
   host: string;

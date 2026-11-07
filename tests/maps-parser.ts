@@ -41,6 +41,7 @@ assert.throws(() => assertRankingEvidence({ dumpCount: 1, businesses: [], rank: 
 const organic = found.filter(b => !b.sponsored);
 assert.throws(() => assertRankingEvidence({ dumpCount: 14, businesses: organic, rank: null }), /cannot establish a top-20/);
 assert.doesNotThrow(() => assertRankingEvidence({ dumpCount: 14, businesses: organic, rank: 2 }));
+assert.throws(() => assertRankingEvidence({ dumpCount: 14, businesses: organic, rank: 2, flags: ["recording_incomplete"] }), /did not cover/);
 assert.doesNotThrow(() => assertRankingEvidence({ dumpCount: 14, businesses: Array.from({ length: 20 }, (_, i) => ({ ...organic[0], name: `Cafe ${i}` })), rank: null }));
 const browserCard = extractBusinesses(xmlStrings('<hierarchy><node content-desc="Compassion Coffeehouse Rated 4.7 out of 5, 105 reviews, Coffee shop" package="com.android.chrome"/></hierarchy>', "com.android.chrome"), 0);
 assert.equal(browserCard[0].name, "Compassion Coffeehouse");
