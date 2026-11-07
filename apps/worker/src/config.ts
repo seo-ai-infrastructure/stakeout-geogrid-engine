@@ -33,6 +33,8 @@ const schema = z.object({
   DUOPLUS_GROUP_NAME: z.string().default(""),
   /** Comma-separated device IDs; limits discovery and leases to a pilot fleet. */
   DUOPLUS_IMAGE_IDS: z.string().default("").transform(v => [...new Set(v.split(",").map(id => id.trim()).filter(Boolean))]),
+  /** Wake only allowlisted, subscribed phones when durable pins are waiting. */
+  AUTO_POWER_ON: z.string().default("false").transform(v => v === "true" || v === "1"),
   /** Optional {"<imageId>":"<proxyId>"} when the phone list doesn't report the bound proxy record */
   DEVICE_PROXY_IDS_JSON: z.string().default("{}"),
   /** Re-run the phone discovery call this often and adjust concurrency */

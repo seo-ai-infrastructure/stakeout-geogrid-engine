@@ -5,7 +5,10 @@
  */
 import { db, Prisma } from "@geogrid/db";
 import { env } from "./config.js";
-import { listPhones, phoneInfo, type PhoneRow } from "./duoplus.js";
+import { listPhones, phoneInfo, listStoppedSubscriptionPhones, listAvailableStartupPlans, powerOnPhone, type PhoneRow } from "./duoplus.js";
+import { startupCandidates, startupCapacity } from "./startupPolicy.js";
+import { randomUUID } from "node:crypto";
+import { tryLease, releaseLease } from "./redis.js";
 
 export type DiscoveredPhone = { imageId: string; proxyId: string; label: string | null; slotIndex: number };
 export type Discovery = { poweredOn: number; active: DiscoveredPhone[]; skipped: string[] };
@@ -64,6 +67,28 @@ function inGroup(row: PhoneRow, group: string): boolean | undefined {
 }
 
 let warnedNoGroupField = false;
+const lastStartAttempt = new Map<string, number>();
+
+export async function wakePendingDevices(log: (m: string) => void): Promise<void> {
+  if (!env.AUTO_POWER_ON || !env.DUOPLUS_IMAGE_IDS.length || !env.DUOPLUS_GROUP_NAME) return;
+  const pending = await db.gridPin.count({ where: { status: "PENDING" } });
+  if (!pending) return;
+  const stopped = await listStoppedSubscriptionPhones(env.DUOPLUS_IMAGE_IDS);
+  if (!stopped.length) return;
+  const plans = await listAvailableStartupPlans();
+  const capacity = Math.min(startupCapacity(plans), env.WORKER_CONCURRENCY ?? 1, pending);
+  const candidates = startupCandidates(stopped, env.DUOPLUS_IMAGE_IDS, env.DUOPLUS_GROUP_NAME, capacity);
+  if (!candidates.length) { log("queued work: no eligible stopped phone with an available subscription startup slot"); return; }
+  for (const id of candidates) {
+    if (Date.now() - (lastStartAttempt.get(id) ?? 0) < 10 * 60_000) continue;
+    const owner = `startup-${randomUUID()}`;
+    if (!await tryLease(id, owner, 180)) continue;
+    lastStartAttempt.set(id, Date.now());
+    try { await powerOnPhone(id); log(`startup requested for allowlisted phone ${id}; readiness will be checked after boot`); }
+    catch (e) { log(`startup ${id} failed: ${(e as Error).message.slice(0, 250)}`); }
+    finally { await releaseLease(id, owner); }
+  }
+}
 
 export async function discoverPhones(log: (m: string) => void): Promise<Discovery> {
   const rows = await listPhones(); // powered on + ADB on

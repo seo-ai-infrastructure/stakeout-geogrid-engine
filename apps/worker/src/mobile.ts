@@ -254,7 +254,7 @@ export async function processMobilePin(job: Job<PinJobData>, token?: string): Pr
       // Keep the phone leased and retrieve the completed recording independently.
       await assertLease();
       log("recovering video through command API after upload timeout");
-      const video = await pullFile(device.imageId, `${PINS_DIR}/${tag}/video.mp4`, 12 * 1024 * 1024, assertLease);
+      const video = await pullFile(device.imageId, `${PINS_DIR}/${tag}/video.mp4`, 40 * 1024 * 1024, assertLease);
       await assertLease();
       await putBuffer(videoKey, video, "video/mp4");
       videoPresent = await exists(videoKey);

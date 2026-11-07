@@ -43,6 +43,9 @@ jobs:
         run: |
           sh -n device/run_pin.sh
           node ../../tests/device-onboarding.mjs
+          node ../../tests/device-session.mjs
+          node --import tsx ../../tests/screen-preflight.ts
+          node --import tsx ../../tests/startup-policy.ts
           node --import tsx ../../tests/device-output.ts
           node --import tsx ../../tests/saved-proxy.ts
           node --import tsx ../../tests/maps-parser.ts

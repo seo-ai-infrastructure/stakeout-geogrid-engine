@@ -8,10 +8,10 @@
 #     > /data/local/tmp/rt/last.log 2>&1 &
 #
 # Steps on the phone (spec §7.4):
-#   2 clear cookies, history and app data of Maps, Google app and Chrome
-#   3 start the 45 s screen recording
+#   2 preserve app data, cookies and the configured Google profile
+#   3 record the capture (up to Android's 180-second limit)
 #   4 open the target app (first-run screens tapped away)
-#   5 type the search query into the app's search box (deep link only as fallback)
+#   5 open a fresh query through the selected app's search intent
 #   6 scroll slowly to the bottom of the results, dumping the screen at every stop
 #   7 package the per-stop UI dumps (the worker merges them into serp.xml/json/html)
 #
@@ -29,7 +29,7 @@ RT=/data/local/tmp/rt
 PD=$RT/pins
 TAG=${SCAN}_${PIN}
 D=$PD/$TAG
-REC_SECS=${REC_SECS:-45}
+REC_SECS=${REC_SECS:-180}
 MAX_STOPS=${MAX_STOPS:-14}
 
 case $APP in
@@ -134,22 +134,24 @@ dismiss_fre() {
   done
 }
 
-# ---- step 2: clear cookies, browser history and app data (no personalisation) --
-# Never clear com.google.android.gms: that resets device services, not search state.
-for P in com.google.android.apps.maps com.google.android.googlequicksearchbox com.android.chrome; do
-  am force-stop $P >/dev/null 2>&1
-  pm clear $P >/dev/null 2>&1
-done
+# ---- step 2: preserve the device's configured session -------------------------
+# Clearing app data logs profiles out and reopens first-run screens on every pin.
+# Stop only the selected app; leave its data and other apps intact.
+am force-stop "$PKG" >/dev/null 2>&1
 pm grant $PKG android.permission.ACCESS_FINE_LOCATION 2>/dev/null
 pm grant $PKG android.permission.ACCESS_COARSE_LOCATION 2>/dev/null
 if [ "$APP" = chrome ]; then
   echo 'chrome --disable-fre --no-default-browser-check --no-first-run' > /data/local/tmp/chrome-command-line 2>/dev/null
 fi
-echo cleared >> "$D/meta.txt"
+echo "session_policy=preserve" >> "$D/meta.txt"
+echo "account_state=not_verified" >> "$D/meta.txt"
 
-# ---- step 3: start the 45 s screen recording ---------------------------------
+# ---- step 3: record through the final captured screen ------------------------
 REC_START=$(date +%s)
 screenrecord --time-limit $REC_SECS --bit-rate 1500000 "$D/video.mp4" >/dev/null 2>&1 &
+REC_PID=$!
+echo "recording_started=$REC_START" >> "$D/meta.txt"
+echo "recording_limit=$REC_SECS" >> "$D/meta.txt"
 sleep 1
 echo recording > "$D/status"
 
@@ -160,25 +162,11 @@ sleep 4
 dismiss_fre
 sleep 1
 
-# ---- step 5: type the query into the app's search box ------------------------
+# ---- step 5: open a fresh query without changing the signed-in profile --------
+# An intent replaces a prior query instead of appending to restored search text.
 MODE=deeplink
-dump "$RT/home.xml"
-case $APP in
-  maps)   RID='search_omnibox_text_box|search_omnibox_container'; TXT='Search here' ;;
-  google) RID='googleapp_search_box|search_box|search_plate'; TXT='Search' ;;
-  chrome) RID='search_box_text|url_bar'; TXT='Search or type' ;;
-esac
-if tap_by_rid "$RID" "$RT/home.xml" || tap_in_file "$TXT" "$RT/home.xml"; then
-  sleep 1.5
-  if [ -n "$QT" ]; then
-    input text "$QT"
-    sleep 0.8
-    input keyevent 66
-    MODE=typed
-  fi
-fi
 if [ "$MODE" = deeplink ]; then
-  # Fallback (Fix 2: z=15 locks the Maps viewport to the pin)
+  # z=15 requests the Maps viewport around the intended pin.
   case $APP in
     maps)   am start -a android.intent.action.VIEW -d "geo:$LAT,$LNG?q=$QE&z=15" $PKG ;;
     google) am start -a android.intent.action.WEB_SEARCH --es query "$Q" $PKG ;;
@@ -220,9 +208,14 @@ while [ $i -lt $MAX_STOPS ]; do
   i=$((i+1))
 done
 echo "stops=$i" >> "$D/meta.txt"
+CAPTURE_END=$(date +%s)
+echo "capture_finished=$CAPTURE_END" >> "$D/meta.txt"
 
 # ---- quality flags -----------------------------------------------------------
 : > "$D/flags.txt"
+if ! kill -0 "$REC_PID" 2>/dev/null || [ $((CAPTURE_END - REC_START)) -ge "$REC_SECS" ]; then
+  echo recording_incomplete >> "$D/flags.txt"
+fi
 for f in "$D"/dump_*.xml; do
   [ -f "$f" ] || continue
   if grep -qiE "unusual traffic|not a robot|verify you are human" "$f"; then echo "captcha $(basename $f)" >> "$D/flags.txt"; fi
@@ -235,16 +228,21 @@ if [ "$APP" = maps ]; then
 fi
 rm -f "$D/probe.xml" "$RT/fre.xml"
 
-# ---- step 9: wait for screenrecord to flush (time floor + process check) -----
-while [ $(( $(date +%s) - REC_START )) -lt $((REC_SECS + 2)) ]; do sleep 1; done
+# ---- finish only this capture's recorder and wait for its MP4 to flush --------
+kill -2 "$REC_PID" 2>/dev/null
 w=0
 while [ $w -lt 20 ]; do
-  if pidof screenrecord >/dev/null 2>&1 || pgrep -f "screenrecord --time-limit" >/dev/null 2>&1; then
+  if kill -0 "$REC_PID" 2>/dev/null; then
     sleep 1; w=$((w+1))
   else
     break
   fi
 done
+if kill -0 "$REC_PID" 2>/dev/null; then
+  echo recording_incomplete >> "$D/flags.txt"
+  kill -15 "$REC_PID" 2>/dev/null
+fi
+wait "$REC_PID" 2>/dev/null
 echo "t_end=$(date +%s)" >> "$D/meta.txt"
 
 # ---- package the dumps (video stays a separate object) -----------------------

@@ -20,6 +20,10 @@ A scan, its pins, credit hold and dispatch rows commit atomically in Neon. Railw
 
 The status page distinguishes infrastructure availability from device readiness and untested proxy targeting. A running deployment alone does not establish that a real-device scan works.
 
+Screen readiness checks run as bounded background probes and require a complete XML hierarchy. This avoids the provider's short synchronous-command limit. `AUTO_POWER_ON=true` optionally wakes a stopped phone only when pins are waiting, the phone is explicitly allowlisted and in the worker group, its subscription is current, its startup mode permits subscription startup, and a prepaid startup slot is available. It never purchases or renews capacity. Startup honors the device lease and is throttled per phone.
+
+Captures preserve existing app data and Google profiles. Each fresh query uses the selected app's search intent so a previous query is not appended. Receipts identify the preserved session policy and leave account sign-in state unverified unless separately inspected. The recorder runs through capture completion, up to 180 seconds; a capture that outlasts its recording is rejected. These controls do not by themselves verify browser geography or establish repeatable grid accuracy.
+
 ## Launch controls and acceptance
 
 `PLATFORM_ENABLED=false` in Vercel pauses new scans and new PayPal purchases at both the UI and API. Sign-in, balances, existing reports and payment notifications continue to work. Change it to `true` and redeploy only after the launch gates below pass, including repeatable location-correct captures and a complete customer flow.
